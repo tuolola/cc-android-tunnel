@@ -57,8 +57,10 @@ class WorkbenchRepository(private val transport: WorkbenchTransport, private val
     private var openSession: String? = null
     private var active = true
     private var lastActivity = 0L
-    private data class Pending(val result: CompletableDeferred<JSONObject>, var frame: JSONObject? = null)
+    private data class Pending(val result: CompletableDeferred<JSONObject>, val type: String, val sessionId: String?, var frame: JSONObject? = null)
     private val pending = mutableMapOf<String,Pending>()
+    private data class Subscription(val sessionId: String, val requestId: String, val task: Deferred<Unit>)
+    private var subscription: Subscription? = null
     private val catalogReads = mutableMapOf<String,Deferred<Unit>>()
     private var writes: Job? = null
     private var preferenceLoaded = false
@@ -74,7 +76,7 @@ class WorkbenchRepository(private val transport: WorkbenchTransport, private val
         retry?.cancel(); retry = null; handshake?.cancel(); handshake = null
         val old = socket; socket = null; openSession = null; old?.close()
         pending.values.forEach { it.result.completeExceptionally(IllegalStateException("连接已中断，请恢复连接后核对操作结果。")) }
-        pending.clear(); catalogReads.clear(); refreshingQuota = false
+        pending.clear(); subscription = null; catalogReads.clear(); refreshingQuota = false
         patch { it.copy(histories = it.histories.mapValues { (_, h) -> h.copy(loading = false,fragments = emptyList()) }) }
         return generation
     }
@@ -209,7 +211,9 @@ class WorkbenchRepository(private val transport: WorkbenchTransport, private val
     fun foreground(active: Boolean) { scope.launch {
         this@WorkbenchRepository.active = active
         if (!active) { retry?.cancel(); retry = null }
-        else if (retryOnForeground && current.endpoint.isNotEmpty() && current.status in setOf("offline","online")) runCatching { reconnect() }
+        // Keep the live subscription and unfinished stream when returning to the app.
+        // The transport heartbeat reports dead sockets through disconnected().
+        else if (retryOnForeground && current.endpoint.isNotEmpty() && current.status == "offline") runCatching { reconnect() }
     } }
     suspend fun login(password: String, code: String? = null) = withContext(dispatcher) {
         val endpoint = current.endpoint
@@ -252,12 +256,14 @@ class WorkbenchRepository(private val transport: WorkbenchTransport, private val
         val connection = socket
         check(connection != null && current.status == "online") { "请等待工作台连接后重试。" }
         check(id !in pending) { "操作正在进行，请等待工作台响应。" }
-        val waiter = Pending(CompletableDeferred())
+        val waiter = Pending(CompletableDeferred(),type,fields.stringOrNull("sessionId"))
         pending[id] = waiter
         try {
             val frame = JSONObject(fields.toString()).put("type",type).put("requestId",id)
             check(connection.send(frame.toString())) { "实时连接已关闭。" }
-            return withTimeout(45_000) { waiter.result.await() }
+            // History includes complete runs and can be much larger than an ordinary reply.
+            val timeout = if (type in setOf("session.subscribe","session.history")) 90_000L else 45_000L
+            return withTimeout(timeout) { waiter.result.await() }
         } catch (e: kotlinx.coroutines.TimeoutCancellationException) { throw IllegalStateException("等待工作台响应超时，请核对操作结果。",e) }
         finally { if (pending[id] === waiter) pending.remove(id) }
     }
@@ -296,6 +302,7 @@ class WorkbenchRepository(private val transport: WorkbenchTransport, private val
         if (frame.optString("type") == "response") {
             if (waiter != null) { pending.remove(frame.optString("requestId")); if (frame.optBoolean("ok")) waiter.result.complete(waiter.frame ?: frame) else waiter.result.completeExceptionally(IllegalStateException(frame.optString("message","工作台拒绝了此操作。"))) }; return
         }
+        if (frame.optString("type") == "session.snapshot" && (waiter == null || waiter.type !in setOf("session.subscribe","session.history") || waiter.sessionId != frame.optJSONObject("session")?.optString("id"))) return
         if (waiter != null) waiter.frame = frame
         when (frame.optString("type")) {
             "ready" -> {
@@ -315,7 +322,7 @@ class WorkbenchRepository(private val transport: WorkbenchTransport, private val
                 else if (run == null && old.activeRun != null) notify("${old.activeRun.id}:ended",session.id,session.title,"本轮运行已结束")
             }
             "session.deleted" -> { val id = frame.getString("sessionId"); if (openSession == id) openSession = null; patch { it.copy(sessions = it.sessions.filter { s -> s.id != id },histories = it.histories - id,selectedId = it.selectedId.takeUnless { selected -> selected == id },pins = it.pins - id,notices = it.notices.filter { n -> n.sessionId != id }) }; savePreferences() }
-            "session.snapshot" -> { val session = Session.from(frame.getJSONObject("session")); upsert(session); frame.optJSONArray("events").objects().map(DeskEvent::from).findLast { it.payload.optString("type") == "native.capabilities" }?.let { cacheCatalog(session,it) }; if (frame.optString("mode") != "prepend") openSession = session.id; updateHistory(session.id) { applySnapshot(it,frame) } }
+            "session.snapshot" -> { val session = Session.from(frame.getJSONObject("session")); upsert(session); frame.optJSONArray("events").objects().map(DeskEvent::from).findLast { it.payload.optString("type") == "native.capabilities" }?.let { cacheCatalog(session,it) }; if (frame.optString("mode") != "prepend" && current.selectedId == session.id) openSession = session.id; updateHistory(session.id) { applySnapshot(it,frame) } }
             "session.fragment" -> { val id = frame.getString("sessionId"); if (id == openSession) updateHistory(id) { addFragment(it,id,frame.getString("runId"),frame.getJSONObject("payload")) } }
             "session.event" -> {
                 val event = DeskEvent.from(frame.getJSONObject("event")); val p = event.payload
@@ -331,17 +338,45 @@ class WorkbenchRepository(private val transport: WorkbenchTransport, private val
             "usage.page" -> patch { it.copy(usagePage = frame) }
         }
     }
+    /** Navigation must not wait for a network reply or cancel the read when its list disappears. */
+    fun openSession(id: String) { scope.launch {
+        val ticket = generation
+        try { selectSession(id) }
+        catch (e: CancellationException) { throw e }
+        catch (e: Exception) { if (ticket == generation && current.selectedId == id && current.histories[id]?.loadError == null) patch { it.copy(error = message(e)) } }
+    } }
     suspend fun selectSession(id: String) = withContext(dispatcher) {
         check(current.sessions.any { it.id == id }) { "这个会话已不存在。" }
-        val alreadyOpen = current.selectedId == id && openSession == id
+        val alreadyOpen = current.selectedId == id && openSession == id && current.histories[id]?.loadError == null
         patch { it.copy(selectedId = id) }
-        if (current.status != "online" || alreadyOpen) return@withContext
+        if (current.status != "online") return@withContext
+        subscription?.takeIf { it.sessionId == id }?.let { it.task.await(); return@withContext }
+        if (alreadyOpen) return@withContext
+        subscription?.let { previous ->
+            previous.task.cancel()
+            updateHistory(previous.sessionId) { it.copy(loading = false) }
+        }
         val after = current.histories[id]?.events?.lastOrNull()?.sequence ?: 0
         val ticket = generation
+        val requestId = UUID.randomUUID().toString()
         updateHistory(id) { it.copy(loading = true,loadError = null,fragments = emptyList()) }
-        try { command("session.subscribe",json("sessionId" to id,"afterSequence" to after)) }
-        catch (e: Exception) { if (ticket == generation && id in current.histories) updateHistory(id) { it.copy(loadError = message(e)) }; throw e }
-        finally { if (id in current.histories) updateHistory(id) { it.copy(loading = false) } }
+        val read = scope.async(start = CoroutineStart.LAZY) {
+            try {
+                val result = sendCommand("session.subscribe",json("sessionId" to id,"afterSequence" to after),requestId)
+                check(result.optString("type") == "session.snapshot") { "服务端未返回会话历史，请重新读取。" }
+            } catch (e: Exception) {
+                if (e !is CancellationException && ticket == generation && subscription?.requestId == requestId && id in current.histories) updateHistory(id) { it.copy(loadError = message(e)) }
+                throw e
+            } finally {
+                if (ticket == generation && subscription?.requestId == requestId) {
+                    subscription = null
+                    if (id in current.histories) updateHistory(id) { it.copy(loading = false) }
+                }
+            }
+        }
+        subscription = Subscription(id,requestId,read)
+        read.start()
+        read.await()
     }
     fun newDraft() { scope.launch { patch { it.copy(selectedId = null) } } }
     suspend fun createSession(title: String = "新会话", requestId: String = UUID.randomUUID().toString(), onCreated: ((String) -> Unit)? = null): String = withContext(dispatcher) {

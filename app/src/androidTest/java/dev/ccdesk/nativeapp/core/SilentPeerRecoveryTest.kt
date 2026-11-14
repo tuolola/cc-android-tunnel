@@ -78,7 +78,7 @@ class SilentPeerRecoveryTest {
             withTimeout(10_000) { repository.state.first { it.status == "online" } }
             repository.selectSession("silent-session")
             assertEquals(listOf(7L),repository.state.value.histories.getValue("silent-session").events.map { it.sequence })
-            withTimeout(60_000) {
+            withTimeout(80_000) {
                 repository.state.first { state ->
                     state.status == "online" && state.histories["silent-session"]?.let {
                         !it.loading && it.events.map { event -> event.sequence } == listOf(7L,8L)
@@ -89,7 +89,7 @@ class SilentPeerRecoveryTest {
             assertTrue("The timeout must come from an unanswered control ping",firstFailure.get() is SocketTimeoutException)
             assertTrue(firstFailure.get()?.message.orEmpty().contains("pong",ignoreCase=true))
             val detectionTime = firstFailureAt.get() - peer.firstAuthenticatedAt.get()
-            assertTrue("A silent connection should fail in about two 15-second intervals",detectionTime in 15_000L..45_000L)
+            assertTrue("A silent connection should fail in about two 30-second intervals",detectionTime in 45_000L..75_000L)
             assertTrue("Repository must expose offline before reconnecting",offlineSeen.get() > 0)
             val subscriptions = peer.requests.filter { it.frame.optString("type") == "session.subscribe" }
             assertEquals(2,subscriptions.size)
@@ -99,7 +99,7 @@ class SilentPeerRecoveryTest {
             assertFalse(peer.requests.any { it.frame.optString("type") in setOf("message.send","run.continue","approval.reply") })
             // The recovered peer replies to pings. Observe that normal control-frame traffic
             // is accepted without generating any application-level heartbeat command.
-            withTimeout(20_000) { while (peer.returnedPongs.get() == 0) delay(50) }
+            withTimeout(40_000) { while (peer.returnedPongs.get() == 0) delay(50) }
             assertEquals("online",repository.state.value.status)
             assertEquals(2,peer.connections.get())
             assertEquals(listOf(7L,8L),repository.state.value.histories.getValue("silent-session").events.map { it.sequence })
@@ -117,6 +117,39 @@ class SilentPeerRecoveryTest {
         }
     }
 
+    @Test fun slowHistoryFrameDoesNotTriggerAFalseHeartbeatDisconnect() = runBlocking<Unit> {
+        val context = IsolatedContext(InstrumentationRegistry.getInstrumentation().targetContext)
+        val peer = SilentTlsPeer(slowHistory = true)
+        val transport = AndroidWorkbenchTransport(context)
+        val failure = AtomicReference<Throwable?>()
+        val observed = object : WorkbenchTransport by transport {
+            override suspend fun socket(endpoint: String, direct: Boolean, observer: SocketObserver) = transport.socket(endpoint, direct, object : SocketObserver by observer {
+                override fun failed(cause: Throwable) { failure.set(cause); observer.failed(cause) }
+            })
+        }
+        val repository = WorkbenchRepository(observed)
+        try {
+            repository.setFingerprint(peer.endpoint, peer.fingerprint)
+            repository.connectService(peer.endpoint, peer.token)
+            withTimeout(10_000) { repository.state.first { it.status == "online" } }
+            val read = runCatching { withTimeout(55_000) { repository.selectSession("silent-session") } }
+            assertTrue("Slow frame read failed: ${read.exceptionOrNull()}; transport=${failure.get()}", read.isSuccess)
+            val history = repository.state.value.histories.getValue("silent-session")
+            assertTrue(history.loaded)
+            assertFalse(history.loading)
+            assertTrue(history.events.single().payload.getString("text").length > 400_000)
+            withTimeout(10_000) { while (peer.returnedPongs.get() == 0) delay(50) }
+            assertEquals("online", repository.state.value.status)
+            assertEquals("The slow snapshot must not restart the authenticated connection", 1, peer.connections.get())
+        } finally {
+            withContext(NonCancellable) {
+                withContext(Dispatchers.Main.immediate) { repository.dispose() }
+                repository.awaitPersistenceDrain(); transport.awaitClosed()
+                peer.close(); context.clean()
+            }
+        }
+    }
+
     private class IsolatedContext(private val base: Context) : ContextWrapper(base) {
         private val prefix = "silent-peer-test-" + UUID.randomUUID()
         private val names = ConcurrentHashMap.newKeySet<String>()
@@ -129,7 +162,7 @@ class SilentPeerRecoveryTest {
     }
 
     private data class ObservedRequest(val connection: Int,val frame: JSONObject)
-    private class SilentTlsPeer {
+    private class SilentTlsPeer(private val slowHistory: Boolean = false) {
         private val certificate = HeldCertificate.Builder().commonName("Silent TLS fixture")
             .addSubjectAlternativeName("127.0.0.1").build()
         private val certificates = HandshakeCertificates.Builder().heldCertificate(certificate).build()
@@ -158,6 +191,7 @@ class SilentPeerRecoveryTest {
                         try { serve(socket,connection) }
                         catch (_: EOFException) { /* Client watchdog cancellation ends the silent connection. */ }
                         catch (_: java.io.IOException) { /* Client close/reset during cleanup is expected. */ }
+                        catch (_: InterruptedException) { Thread.currentThread().interrupt() }
                         finally { clients.remove(socket); runCatching { socket.close() } }
                     }
                 }
@@ -165,7 +199,7 @@ class SilentPeerRecoveryTest {
         }
 
         private fun serve(socket: Socket,connection: Int) {
-            socket.soTimeout = 120_000 // The peer itself must not trigger the 30-second failure.
+            socket.soTimeout = 150_000 // Only the client's heartbeat should retire a silent peer.
             val input = BufferedInputStream(socket.getInputStream())
             val output = socket.getOutputStream()
             val requestLine = line(input)
@@ -196,15 +230,16 @@ class SilentPeerRecoveryTest {
                                 val after = frame.optLong("afterSequence")
                                 val event = json("sessionId" to "silent-session","runId" to "fixture-run",
                                     "sequence" to if (connection == 1) 7 else 8,"createdAt" to "2026-01-01T00:00:00Z",
-                                    "payload" to json("type" to "text.delta","messageId" to "fixture-reply","text" to "Durable fixture reply."))
-                                text(output,json("type" to "session.snapshot","requestId" to frame.getString("requestId"),
+                                    "payload" to json("type" to "text.delta","messageId" to "fixture-reply","text" to if(slowHistory)"Slow history record. ".repeat(22_000) else "Durable fixture reply."))
+                                val snapshot = json("type" to "session.snapshot","requestId" to frame.getString("requestId"),
                                     "session" to session(),"mode" to if(after == 0L)"replace" else "append",
-                                    "hasEarlier" to false,"events" to JSONArray().put(event)))
+                                    "hasEarlier" to false,"events" to JSONArray().put(event))
+                                writeFrame(output,1,snapshot.toString().toByteArray(Charsets.UTF_8),if(slowHistory)35_000 else 0)
                                 text(output,json("type" to "response","requestId" to frame.getString("requestId"),"ok" to true))
                             }
                         }
                     }
-                    9 -> if (connection == 1) ignoredPings.incrementAndGet() else {
+                    9 -> if (connection == 1 && !slowHistory) ignoredPings.incrementAndGet() else {
                         writeFrame(output,10,payload);returnedPongs.incrementAndGet()
                     }
                     8 -> { writeFrame(output,8,payload);return }
@@ -214,11 +249,18 @@ class SilentPeerRecoveryTest {
         private fun session() = json("id" to "silent-session","title" to "Silent peer fixture",
             "device" to json("id" to "fixture-server"),"permissionMode" to "default","activeRun" to null)
         private fun text(output: OutputStream,frame: JSONObject) = writeFrame(output,1,frame.toString().toByteArray(Charsets.UTF_8))
-        private fun writeFrame(output: OutputStream,opcode: Int,payload: ByteArray) {
+        private fun writeFrame(output: OutputStream,opcode: Int,payload: ByteArray,delayMillis: Long = 0) {
             output.write(0x80 or opcode)
             if (payload.size < 126) output.write(payload.size)
-            else { require(payload.size <= 65535);output.write(126);output.write(payload.size ushr 8);output.write(payload.size and 255) }
-            output.write(payload);output.flush()
+            else if (payload.size <= 65535) { output.write(126);output.write(payload.size ushr 8);output.write(payload.size and 255) }
+            else { output.write(127);for(shift in 7 downTo 0)output.write(((payload.size.toLong() ushr (shift*8)) and 255).toInt()) }
+            if (delayMillis > 0) {
+                val half = payload.size / 2
+                output.write(payload,0,half);output.flush()
+                Thread.sleep(delayMillis) // A pong can only follow the end of this WebSocket frame.
+                output.write(payload,half,payload.size-half)
+            } else output.write(payload)
+            output.flush()
         }
         private fun readFrame(input: InputStream): Pair<Int,ByteArray> {
             val first = input.read().also { if(it < 0) throw EOFException() }

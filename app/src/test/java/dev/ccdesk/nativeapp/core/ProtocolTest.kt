@@ -17,7 +17,13 @@ class ProtocolTest {
         val sent = mutableListOf<JSONObject>(); var closed = false
         override fun send(text: String): Boolean { sent += JSONObject(text); return !closed }
         override fun close() { closed = true }
-        fun frame(frame: JSONObject) = observer.message(frame.toString())
+        fun frame(frame: JSONObject) {
+            // Real snapshots always echo the history request ID.
+            if (frame.optString("type") == "session.snapshot" && !frame.has("requestId")) {
+                sent.lastOrNull { it.optString("type") in setOf("session.subscribe","session.history") }?.let { frame.put("requestId",it.getString("requestId")) }
+            }
+            observer.message(frame.toString())
+        }
         fun response(id: String = sent.last().getString("requestId")) = frame(json("type" to "response","requestId" to id,"ok" to true))
     }
     private class FakeTransport : WorkbenchTransport {
@@ -47,6 +53,121 @@ class ProtocolTest {
     private fun ready(socket: FakeSocket) {
         socket.observer.opened()
         socket.frame(json("type" to "ready","protocolVersion" to 25,"sessions" to JSONArray().put(session()),"version" to "test").apply { if (!socket.direct) put("browser",json("sessionId" to "browser","serverDeviceId" to "server")) })
+    }
+    @Test fun foregroundPreservesHealthySocketPendingReadAndLiveFragments() = runTest {
+        val transport = FakeTransport()
+        val repository = WorkbenchRepository(transport, StandardTestDispatcher(testScheduler))
+        try {
+            repository.setEndpoint("https://example.test")
+            val socket = transport.sockets.single()
+            ready(socket); runCurrent()
+            val reading = async { repository.selectSession("s") }; runCurrent()
+            repository.foreground(false); runCurrent()
+            repository.foreground(true); runCurrent()
+            assertEquals(1, transport.sockets.size)
+            assertFalse(socket.closed)
+            assertFalse(reading.isCompleted)
+            socket.frame(json("type" to "session.snapshot", "session" to session(), "mode" to "replace", "events" to JSONArray().put(event(1, "Saved"))))
+            socket.response(); runCurrent(); reading.await()
+            socket.frame(json("type" to "session.fragment", "sessionId" to "s", "runId" to "r", "payload" to json("type" to "text.delta", "messageId" to "live", "text" to "Unfinished")))
+            runCurrent()
+            val history = repository.state.value.histories.getValue("s")
+            repository.foreground(false); runCurrent()
+            repository.foreground(true); runCurrent()
+            assertEquals("online", repository.state.value.status)
+            assertEquals(1, transport.sockets.size)
+            assertSame(history, repository.state.value.histories.getValue("s"))
+            assertEquals(1, socket.sent.count { it.optString("type") == "session.subscribe" })
+        } finally { repository.dispose() }
+    }
+
+    @Test fun foregroundRecoversAnOfflineSocketOnceAndLeavesTheHandshakeAlone() = runTest {
+        val transport = FakeTransport()
+        val repository = WorkbenchRepository(transport, StandardTestDispatcher(testScheduler))
+        try {
+            repository.setEndpoint("https://example.test")
+            repository.foreground(false); repository.foreground(true); runCurrent()
+            assertEquals(1, transport.sockets.size)
+            val socket = transport.sockets.single(); ready(socket); runCurrent()
+            repository.foreground(false); runCurrent()
+            socket.observer.failed(java.io.IOException("Network unavailable")); runCurrent()
+            advanceTimeBy(60_000); runCurrent()
+            assertEquals(1, transport.sockets.size)
+            repository.foreground(true); runCurrent()
+            repository.foreground(true); runCurrent()
+            assertEquals(2, transport.sockets.size)
+            ready(transport.sockets.last()); runCurrent()
+            assertEquals("online", repository.state.value.status)
+        } finally { repository.dispose() }
+    }
+
+    @Test fun repeatedSessionSelectionSharesOneReadAndMissingSnapshotCanRetry() = runTest {
+        val transport = FakeTransport()
+        val repository = WorkbenchRepository(transport, StandardTestDispatcher(testScheduler))
+        try {
+            repository.setEndpoint("https://example.test")
+            val socket = transport.sockets.single(); ready(socket); runCurrent()
+            repository.openSession("s"); runCurrent()
+            repository.openSession("s"); runCurrent()
+            assertEquals(1, socket.sent.count { it.optString("type") == "session.subscribe" })
+            socket.response(); runCurrent()
+            var history = repository.state.value.histories.getValue("s")
+            assertFalse(history.loading)
+            assertFalse(history.loaded)
+            assertNotNull(history.loadError)
+            repository.openSession("s"); runCurrent()
+            socket.frame(json("type" to "session.snapshot", "session" to session(), "mode" to "replace", "events" to JSONArray().put(event(1, "Loaded on retry"))))
+            socket.response(); runCurrent()
+            history = repository.state.value.histories.getValue("s")
+            assertTrue(history.loaded)
+            assertFalse(history.loading)
+            assertNull(history.loadError)
+            assertEquals("Loaded on retry", history.events.single().payload.getString("text"))
+        } finally { repository.dispose() }
+    }
+
+    @Test fun changingSessionsRejectsLateSnapshotsAndKeepsTheLatestStream() = runTest {
+        val transport = FakeTransport()
+        val repository = WorkbenchRepository(transport, StandardTestDispatcher(testScheduler))
+        try {
+            repository.setEndpoint("https://example.test")
+            val socket = transport.sockets.single(); ready(socket)
+            socket.frame(json("type" to "session.updated", "session" to session("second"))); runCurrent()
+            repository.openSession("s"); runCurrent()
+            val oldId = socket.sent.last().getString("requestId")
+            repository.openSession("second"); runCurrent()
+            assertFalse(repository.state.value.histories.getValue("s").loading)
+            assertTrue(repository.state.value.histories.getValue("second").loading)
+            val currentId = socket.sent.last().getString("requestId")
+            socket.frame(json("type" to "session.snapshot", "requestId" to currentId, "session" to session("second"), "mode" to "replace", "events" to JSONArray().put(event(1, "Second history", "second"))))
+            socket.response(currentId); runCurrent()
+            socket.frame(json("type" to "session.snapshot", "requestId" to oldId, "session" to session(), "mode" to "replace", "events" to JSONArray().put(event(99, "Late stale history"))))
+            socket.response(oldId)
+            socket.frame(json("type" to "session.fragment", "sessionId" to "second", "runId" to "r", "payload" to json("type" to "text.delta", "messageId" to "live", "text" to "Still receiving")))
+            runCurrent()
+            assertEquals("second", repository.state.value.selectedId)
+            assertTrue(repository.state.value.histories.getValue("s").events.isEmpty())
+            assertEquals("Still receiving", repository.state.value.histories.getValue("second").fragments.single().payload.getString("text"))
+        } finally { repository.dispose() }
+    }
+
+    @Test fun unansweredSessionReadStopsLoadingAndCanBeRetried() = runTest {
+        val transport = FakeTransport()
+        val repository = WorkbenchRepository(transport, StandardTestDispatcher(testScheduler))
+        try {
+            repository.setEndpoint("https://example.test")
+            val socket = transport.sockets.single(); ready(socket); runCurrent()
+            repository.openSession("s"); runCurrent()
+            advanceTimeBy(90_000); runCurrent()
+            assertFalse(repository.state.value.histories.getValue("s").loading)
+            assertNotNull(repository.state.value.histories.getValue("s").loadError)
+            repository.openSession("s"); runCurrent()
+            assertEquals(2, socket.sent.count { it.optString("type") == "session.subscribe" })
+            socket.frame(json("type" to "session.snapshot", "session" to session(), "mode" to "replace", "events" to JSONArray()))
+            socket.response(); runCurrent()
+            assertTrue(repository.state.value.histories.getValue("s").loaded)
+            assertNull(repository.state.value.histories.getValue("s").loadError)
+        } finally { repository.dispose() }
     }
     @Test fun addressRulesPreservePrefixAndRejectCredentialsAndDowngrades() {
         assertEquals("https://example.test:8443/workbench/",normalizeEndpoint(" https://example.test:8443/workbench "))

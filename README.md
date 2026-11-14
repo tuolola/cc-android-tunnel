@@ -17,7 +17,7 @@
 </p>
 
 <p>
-  <a href="https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.1-native/CCtunnel.apk"><img src="https://img.shields.io/badge/APK-1.0.1--native-16a34a?style=for-the-badge" alt="下载 CCtunnel 1.0.1-native 公开测试版 APK" /></a>
+  <a href="https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.2-native/CCtunnel.apk"><img src="https://img.shields.io/badge/APK-1.0.2--native-16a34a?style=for-the-badge" alt="下载 CCtunnel 1.0.2-native 公开测试版 APK" /></a>
   <a href="#快速开始"><img src="https://img.shields.io/badge/使用教程-从服务器到手机-2563eb?style=for-the-badge" alt="从零开始使用" /></a>
   <a href="#验证与验收"><img src="https://img.shields.io/badge/验证-测试与审计-0f766e?style=for-the-badge" alt="测试与审计" /></a>
   <a href="https://github.com/sun168567/cc-desk-tunnel"><img src="https://img.shields.io/badge/项目来源-cc--desk--tunnel-475569?style=for-the-badge" alt="上游项目" /></a>
@@ -25,7 +25,7 @@
 </p>
 
 <p>
-  <img src="https://img.shields.io/badge/版本-1.0.1--native-2563eb?style=flat-square" alt="版本 1.0.1-native" />
+  <img src="https://img.shields.io/badge/版本-1.0.2--native-2563eb?style=flat-square" alt="版本 1.0.2-native" />
   <img src="https://img.shields.io/badge/Kotlin-2.2.10-7f52ff?style=flat-square" alt="Kotlin 2.2.10" />
   <img src="https://img.shields.io/badge/UI-Jetpack%20Compose-4285f4?style=flat-square" alt="Jetpack Compose" />
   <img src="https://img.shields.io/badge/Android-7.0%2B-3ddc84?style=flat-square" alt="Android 7.0 及以上" />
@@ -115,6 +115,8 @@ flowchart LR
 | 设置页面 | 连接与访问管理、TOTP 控制、账号与用量、应用内通知和帮助 |
 | Android 体验 | 浅色与深色主题、原生多行输入框、键盘避让、滚动、手势、禁用与只读状态 |
 | 恢复与本地状态 | 临时断线时保留已加载历史，按持久事件游标恢复；保存服务范围内的偏好，通过 Android Keystore 保护凭据 |
+
+**App 更新（`1.0.2-native` 起）**：设置概览支持手动检查、前台自动检查和测试版渠道选择；自动检查成功后间隔 24 小时，失败后 1 小时再试。下载交给系统浏览器，由用户安装。旧版 `v1.0.1-native` 不含此功能，需要先手动下载安装 `v1.0.2-native`。详见 [App 更新与版本发布](./docs/app-updates.md)。
 
 ## 快速开始
 
@@ -248,9 +250,17 @@ sudo cc-desk-tunnel summary
 
 **操作位置：Android 手机；需要自行构建时在开发电脑操作。**
 
-1. [直接下载 CCtunnel.apk（v1.0.1-native）](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.1-native/CCtunnel.apk)。适用于 **Android 7.0 及以上**，当前为 **Debug 签名的公开测试版**。查看[版本发布说明](https://github.com/tuolola/cc-android-tunnel/releases/tag/v1.0.1-native)和 [SHA256SUMS.txt 校验清单](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.1-native/SHA256SUMS.txt)。
+1. [直接下载 CCtunnel.apk（v1.0.2-native）](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.2-native/CCtunnel.apk)。适用于 **Android 7.0 及以上**，当前为 **Debug 签名的公开测试版**（versionCode 8）。查看[版本发布说明](https://github.com/tuolola/cc-android-tunnel/releases/tag/v1.0.2-native)和 [SHA256SUMS.txt 校验清单](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.2-native/SHA256SUMS.txt)。
 2. 核对 SHA-256 后将 APK 传到手机安装。也可以连接 USB 调试，在 APK 所在目录执行 `adb install -r .\CCtunnel.apk`。已有应用须同包名、同签名且版本允许更新，才能覆盖安装。
 3. 打开手机上的 **CCtunnel**。手机只需安装 APK；Node、Docker、Android Studio 均不需要安装到手机。
+
+本版 APK 大小为 **13,563,373 字节**，SHA-256 为：
+
+```text
+fcaa59deb34e22370cbf350a7d3a9ff176afc55e8a667d066c0122c67e21e47e
+```
+
+从 `v1.0.1-native` 升级需手动下载本版；旧版没有 App 更新入口。本版沿用相同签名，不需要先卸载旧版。
 
 需要自行构建时，见[从源码构建 Android App](#从源码构建-android-app)。上游发布页的 Windows/macOS/Linux 包用于电脑，不能安装到手机。
 
@@ -380,14 +390,15 @@ python -B scripts/audit-native-apk.py app/build/outputs/apk/debug/app-debug.apk 
 
 | 检查 | 本轮结果 |
 | --- | --- |
-| 构建 | Debug APK 与 Android 设备测试 APK 构建成功 |
-| JVM 测试 | 43 项通过，0 项失败 |
+| 构建 | `1.0.2-native`（versionCode 8）Debug APK 与 Android 设备测试 APK 构建成功；应用签名与已发布 `1.0.1-native` 相同 |
+| JVM 测试 | 65 项通过，0 项失败，包含 17 项 App 更新逻辑测试 |
 | 独立审计回归测试 | 8 项通过 |
-| Android Lint | 0 个错误，37 条警告 |
+| Android Lint | 0 个错误，40 条警告 |
 | 原生约束 | APK 原生边界检查与独立 APK 审计通过 |
-| 完整 Android 设备套件 | 共 61 项：58 项通过、3 项真实服务 opt-in 测试跳过、0 项失败 |
+| 完整 Android 设备套件 | 共 72 项：68 项通过、4 项工作台真实服务 opt-in 测试跳过、0 项失败；本轮已显式启用真实 GitHub 更新检查 |
+| App 更新实际操作 | Android 14 模拟器上通过正式入口检查真实 GitHub 发布，验证浅/深色主题、关闭两个选项后的重启持久化及正式渠道暂无可安装版本提示 |
 
-设备套件包含 13 项会话设置测试，涵盖权限模式保存与取消、草稿会话创建、只读和运行中状态、窄屏输入区，以及重复停止请求的处理。本轮未重新运行完整真实服务流程；3 项 opt-in 跳过不计作真实连接、工具执行或断网恢复验收通过。以上为本轮构建和指定模拟器上的结果，不代表所有设备均已验证。
+发布前的 App 更新新版提示和错误界面使用英文 fixture 验证；这些测试不能证明系统浏览器下载与覆盖安装的完整链路已通过，该链路仍需单独验收。更新专项测试与复现步骤见 [App 更新验收](./docs/app-updates.md#验收与复现)。本轮使用 `runLiveUpdates=true` 验证公开 GitHub 更新源；真实工作台聊天、会话恢复、工具与断网恢复 4 项测试跳过，不计作这些流程验收通过。以上为本轮构建和指定模拟器上的结果，不代表所有设备均已验证。
 
 ### 测试源码与验收边界
 
@@ -397,7 +408,9 @@ python -B scripts/audit-native-apk.py app/build/outputs/apk/debug/app-debug.apk 
 | [原生 TLS 集成](./app/src/androidTest/java/dev/ccdesk/nativeapp/core/NativeTlsIntegrationTest.kt) · [凭据存储](./app/src/androidTest/java/dev/ccdesk/nativeapp/core/CredentialVaultTest.kt) · [静默连接恢复](./app/src/androidTest/java/dev/ccdesk/nativeapp/core/SilentPeerRecoveryTest.kt) | Android 上的本地 TLS fixture、加密凭据和无 Pong 响应时的连接恢复 |
 | [UI 设备测试](./app/src/androidTest/java/dev/ccdesk/nativeapp/ui) | 原生输入框、Markdown、审批/问题 fixture、模型、设置、手势与全部七份离线许可全文 |
 | [会话设置](./app/src/androidTest/java/dev/ccdesk/nativeapp/ui/SessionSettingsTest.kt) | 权限模式、保存与取消、会话操作、状态限制和窄屏输入区 |
-| [真实聊天](./app/src/androidTest/java/dev/ccdesk/nativeapp/core/LiveWorkbenchAcceptanceTest.kt) · [真实工具](./app/src/androidTest/java/dev/ccdesk/nativeapp/core/RealToolAcceptanceTest.kt) · [真实网络](./app/src/androidTest/java/dev/ccdesk/nativeapp/core/RealNetworkRecoveryTest.kt) | 显式 opt-in 测试，需要真实服务或网络中断条件；默认跳过不计作验收通过 |
+| [App 更新逻辑](./app/src/test/java/dev/ccdesk/nativeapp/core/AppUpdatesTest.kt) · [更新组件](./app/src/androidTest/java/dev/ccdesk/nativeapp/ui/AppUpdateScreenTest.kt) · [设置容器](./app/src/androidTest/java/dev/ccdesk/nativeapp/ui/AppUpdateIntegrationTest.kt) | 版本与渠道筛选、安全链接、缓存与重试、原生说明、实际设置容器滚动和导航；新版与错误状态使用英文 fixture |
+| [真实 GitHub 发布检查](./app/src/androidTest/java/dev/ccdesk/nativeapp/core/AppUpdateLiveTest.kt) | 显式 `runLiveUpdates=true`，只读取公开发布源，不连接工作台或读取工作台凭据 |
+| [真实聊天](./app/src/androidTest/java/dev/ccdesk/nativeapp/core/LiveWorkbenchAcceptanceTest.kt) · [真实会话恢复](./app/src/androidTest/java/dev/ccdesk/nativeapp/core/LiveSessionRecoveryTest.kt) · [真实工具](./app/src/androidTest/java/dev/ccdesk/nativeapp/core/RealToolAcceptanceTest.kt) · [真实网络](./app/src/androidTest/java/dev/ccdesk/nativeapp/core/RealNetworkRecoveryTest.kt) | 显式 opt-in 测试，需要真实服务或网络中断条件；默认跳过不计作验收通过 |
 
 启用 opt-in 测试前请阅读对应参数检查。真实服务测试要求显式匹配目标主机且已登录；网络测试会临时关闭 Wi-Fi，并要求指定测试会话。应在测试设备和服务上运行。
 

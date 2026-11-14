@@ -17,7 +17,7 @@
 </p>
 
 <p>
-  <a href="https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.1-native/CCtunnel.apk"><img src="https://img.shields.io/badge/APK-1.0.1--native-16a34a?style=for-the-badge" alt="Download the CCtunnel 1.0.1-native public preview APK" /></a>
+  <a href="https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.2-native/CCtunnel.apk"><img src="https://img.shields.io/badge/APK-1.0.2--native-16a34a?style=for-the-badge" alt="Download the CCtunnel 1.0.2-native public preview APK" /></a>
   <a href="#quick-start"><img src="https://img.shields.io/badge/Setup-VPS%20to%20Android-2563eb?style=for-the-badge" alt="Set up the server, desktop and phone" /></a>
   <a href="#verification"><img src="https://img.shields.io/badge/Verification-Tests%20%26%20Audit-0f766e?style=for-the-badge" alt="Tests and audit" /></a>
   <a href="https://github.com/sun168567/cc-desk-tunnel"><img src="https://img.shields.io/badge/Origin-cc--desk--tunnel-475569?style=for-the-badge" alt="Upstream project" /></a>
@@ -25,7 +25,7 @@
 </p>
 
 <p>
-  <img src="https://img.shields.io/badge/Version-1.0.1--native-2563eb?style=flat-square" alt="Version 1.0.1-native" />
+  <img src="https://img.shields.io/badge/Version-1.0.2--native-2563eb?style=flat-square" alt="Version 1.0.2-native" />
   <img src="https://img.shields.io/badge/Kotlin-2.2.10-7f52ff?style=flat-square" alt="Kotlin 2.2.10" />
   <img src="https://img.shields.io/badge/UI-Jetpack%20Compose-4285f4?style=flat-square" alt="Jetpack Compose" />
   <img src="https://img.shields.io/badge/Android-7.0%2B-3ddc84?style=flat-square" alt="Android 7.0 and later" />
@@ -112,6 +112,8 @@ The table describes the native implementation. Server capabilities and permissio
 | Settings | Connection and access management, TOTP controls, account and usage views, in-app notifications and help |
 | Android behavior | Light/dark themes, native multiline editor, keyboard avoidance, scrolling, gestures, disabled and read-only states |
 | Recovery and local state | Retain loaded history during temporary disconnection, recover by durable event cursor, persist service-scoped preferences and protect credentials with Android Keystore |
+
+**App updates (starting with `1.0.2-native`)**: the settings overview offers manual checks, automatic foreground checks, and a prerelease toggle. Automatic checks wait 24 hours after success or one hour after failure. Downloads open in the system browser for user installation. Older `v1.0.1-native` installations do not include this feature; download and install `v1.0.2-native` manually first. See [App updates and release maintenance (Chinese)](./docs/app-updates.md).
 
 ## Quick Start
 
@@ -207,9 +209,17 @@ Keep the three credentials separate: **SSH key/password** manages the VPS; **ser
 
 ### 6. Install CCtunnel on Android
 
-Download [CCtunnel.apk (v1.0.1-native)](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.1-native/CCtunnel.apk) for **Android 7.0 or newer**. This is a **Debug-signed public preview**. Read the [release notes](https://github.com/tuolola/cc-android-tunnel/releases/tag/v1.0.1-native) and download the [SHA256SUMS.txt checksum list](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.1-native/SHA256SUMS.txt).
+Download [CCtunnel.apk (v1.0.2-native)](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.2-native/CCtunnel.apk) for **Android 7.0 or newer**. This is a **Debug-signed public preview** (versionCode 8). Read the [release notes](https://github.com/tuolola/cc-android-tunnel/releases/tag/v1.0.2-native) and download the [SHA256SUMS.txt checksum list](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.2-native/SHA256SUMS.txt).
 
 Verify the SHA-256 checksum, then transfer the APK to the phone and install it. With USB debugging enabled, you can alternatively run `adb install -r .\CCtunnel.apk` from the APK's directory on the development computer. Updating an existing installation requires the same package name and signing key, with a version Android permits as an update. Open **CCtunnel** and its connection screen. The phone does not need Node, Docker or Android Studio.
+
+This APK is **13,563,373 bytes**. Its SHA-256 is:
+
+```text
+fcaa59deb34e22370cbf350a7d3a9ff176afc55e8a667d066c0122c67e21e47e
+```
+
+Upgrade from `v1.0.1-native` by downloading this version manually; the older version has no app-update entry point. The signing certificate is unchanged, so uninstalling the old version first is unnecessary.
 
 To build it yourself, see [Build the Android App](#build-the-android-app). Upstream Windows/macOS/Linux downloads are computer packages and cannot be installed on the phone.
 
@@ -318,14 +328,15 @@ Use `scripts/measure-performance.ps1` with the [performance testing guide (Chine
 
 | Check | Result for this run |
 | --- | --- |
-| Build | Debug APK and Android instrumentation APK built successfully |
-| JVM tests | 43 passed, 0 failed |
+| Build | `1.0.2-native` (versionCode 8) Debug APK and Android instrumentation APK built successfully; the app uses the same signing certificate as the published `1.0.1-native` APK |
+| JVM tests | 65 passed, 0 failed, including 17 app-update logic tests |
 | Independent audit regression tests | 8 passed |
-| Android Lint | 0 errors, 37 warnings |
+| Android Lint | 0 errors, 40 warnings |
 | Native enforcement | APK native-boundary check and independent APK audit passed |
-| Full Android device suite | 61 total: 58 passed, 3 real-service opt-in tests skipped, 0 failed |
+| Full Android device suite | 72 total: 68 passed, 4 live-workbench opt-in tests skipped, 0 failed; the live GitHub update check was explicitly enabled |
+| App-update interaction | Checked the real GitHub feed through the normal app entry point on Android 14; verified light/dark themes, both options remaining off after restart, and the empty stable-channel message |
 
-The device suite includes 13 session-settings tests covering saved and cancelled permission changes, draft-session creation, read-only and running states, the narrow-screen composer and repeated stop requests. Full real-service flows were not rerun in this round; the three opt-in skips do not establish acceptance of real connections, tool execution or network-loss recovery. These results apply to this build and the tested emulator, not every device.
+Before publication, new-version and error screens were verified with English fixtures. Those tests do not establish that the complete system-browser download and installation flow passed; that flow still requires separate acceptance. See [app-update verification and reproduction (Chinese)](./docs/app-updates.md#验收与复现). This run enabled `runLiveUpdates=true` for the public GitHub feed. Four live-workbench tests covering chat, session recovery, tools and network-loss recovery were skipped, so those flows were not revalidated. These results apply to this build and the tested emulator, not every device.
 
 ### Test sources and acceptance boundaries
 
@@ -335,7 +346,9 @@ The device suite includes 13 session-settings tests covering saved and cancelled
 | [Native TLS integration](./app/src/androidTest/java/dev/ccdesk/nativeapp/core/NativeTlsIntegrationTest.kt) · [Credential vault](./app/src/androidTest/java/dev/ccdesk/nativeapp/core/CredentialVaultTest.kt) · [Silent peer recovery](./app/src/androidTest/java/dev/ccdesk/nativeapp/core/SilentPeerRecoveryTest.kt) | Local TLS fixtures, encrypted credentials and missing-Pong recovery on Android |
 | [UI instrumentation](./app/src/androidTest/java/dev/ccdesk/nativeapp/ui) | Native composer, Markdown, approval/question fixtures, models, settings, gestures and all seven offline license documents |
 | [Session settings](./app/src/androidTest/java/dev/ccdesk/nativeapp/ui/SessionSettingsTest.kt) | Permission modes, saving and cancelling, session actions, state restrictions and the narrow-screen composer |
-| [Real chat](./app/src/androidTest/java/dev/ccdesk/nativeapp/core/LiveWorkbenchAcceptanceTest.kt) · [Real tool](./app/src/androidTest/java/dev/ccdesk/nativeapp/core/RealToolAcceptanceTest.kt) · [Real network](./app/src/androidTest/java/dev/ccdesk/nativeapp/core/RealNetworkRecoveryTest.kt) | Explicit opt-in tests requiring service access or network interruption; default skips are not acceptance passes |
+| [App-update logic](./app/src/test/java/dev/ccdesk/nativeapp/core/AppUpdatesTest.kt) · [Update components](./app/src/androidTest/java/dev/ccdesk/nativeapp/ui/AppUpdateScreenTest.kt) · [Settings container](./app/src/androidTest/java/dev/ccdesk/nativeapp/ui/AppUpdateIntegrationTest.kt) | Version/channel selection, safe links, caching/retries, native notes, real settings-container scrolling and navigation; new-version/error states use English fixtures |
+| [Live GitHub release check](./app/src/androidTest/java/dev/ccdesk/nativeapp/core/AppUpdateLiveTest.kt) | Explicit `runLiveUpdates=true`; reads only the public feed without connecting to the workbench or reading workbench credentials |
+| [Real chat](./app/src/androidTest/java/dev/ccdesk/nativeapp/core/LiveWorkbenchAcceptanceTest.kt) · [Live session recovery](./app/src/androidTest/java/dev/ccdesk/nativeapp/core/LiveSessionRecoveryTest.kt) · [Real tool](./app/src/androidTest/java/dev/ccdesk/nativeapp/core/RealToolAcceptanceTest.kt) · [Real network](./app/src/androidTest/java/dev/ccdesk/nativeapp/core/RealNetworkRecoveryTest.kt) | Explicit opt-in tests requiring service access or network interruption; default skips are not acceptance passes |
 
 Read the argument checks before enabling opt-in tests. Real-service tests require an explicitly matched host and an existing login; the network test temporarily disables Wi-Fi and requires a designated test session. Use a test device and service.
 

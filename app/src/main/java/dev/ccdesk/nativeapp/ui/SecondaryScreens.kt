@@ -467,6 +467,7 @@ private class SettingsLineHeight(private val height: Int) : LineHeightSpan {
         SRow("使用帮助", icon = "circle-help", last = state.version.isNullOrBlank(), onClick = { onNavigate("help") })
         if (!state.version.isNullOrBlank()) SRow("工作台服务版本", state.version, "info", last = true)
     }
+    AppUpdateSettings()
     if (state.authenticated) SSection {
         SRow("退出当前登录", icon = "log-out", danger = true, last = !confirm, onClick = { confirm = true })
         DeskExpandable(confirm) { Column(Modifier.padding(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -905,7 +906,7 @@ fun ChatsScreen(repository: WorkbenchRepository, onNavigate: (String) -> Unit, o
                         val pressed by interaction.pressedState()
                         Column(Modifier.animateItem(fadeInSpec = DeskMotion.fadeIn(), placementSpec = DeskMotion.contentOffset, fadeOutSpec = DeskMotion.fadeOut()).padding(horizontal = 16.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Row(Modifier.weight(1f).heightIn(min = 54.dp).clip(RoundedCornerShape(8.dp)).background(animatedHighlight(pressed, activeId == session.id, c.accent)).combinedClickable(interactionSource = interaction, indication = null, onClick = { action.run { repository.selectSession(session.id); onClose() } }, onLongClick = { haptics.threshold(); menu() }).padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Row(Modifier.weight(1f).heightIn(min = 54.dp).clip(RoundedCornerShape(8.dp)).background(animatedHighlight(pressed, activeId == session.id, c.accent)).combinedClickable(interactionSource = interaction, indication = null, onClick = { repository.openSession(session.id); onClose() }, onLongClick = { haptics.threshold(); menu() }).semantics { contentDescription = "打开会话：${session.title}" }.padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                                     AnimatedVisibility(session.id in state.pins, enter = fadeIn(DeskMotion.fadeIn()) + scaleIn(DeskMotion.icon(), .5f), exit = fadeOut(DeskMotion.fadeOut()) + scaleOut(DeskMotion.icon(), .5f)) { DeskIcon("pin", size = 16.dp, tint = c.mutedForeground) }
                                     Column(Modifier.weight(1f)) {
                                         SNativeText(session.title, size = 15, lineHeight = 21, maxLines = 1)

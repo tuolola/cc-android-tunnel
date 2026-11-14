@@ -80,11 +80,13 @@ internal class AndroidWorkbenchTransport(context: Context) : WorkbenchTransport 
         return clients.getOrPut(key) {
             val jar = if (direct) null else PinnedCookies(secrets,key.origin,key.pin)
             val http=secureClient(key.origin,key.pin,jar ?: CookieJar.NO_COOKIES)
-            // HTTP timeouts stop applying to the upgraded WebSocket. Control-frame
-            // pings detect a silent lost route even when Android retains activeNetwork.
-            // A missed pong at the next interval fails the socket and enters the existing
-            // repository reconnect path. No protocol-25 business frame or credential is added.
-            Client(if(websocket)http.newBuilder().pingInterval(15,TimeUnit.SECONDS).build()else http,jar)
+            // OkHttp suspends the read timeout while waiting for a frame header, but
+            // restores it while reading the payload. A large history must not inherit
+            // the short HTTP read timeout. The repository bounds history reads separately.
+            // Pongs cannot overtake a large, unfragmented history frame. Allow two 30-second
+            // intervals: real 459 KB snapshots can take ~37 seconds on a slow service link.
+            // A silent peer still fails within about a minute; no business frame is used as a ping.
+            Client(if(websocket)http.newBuilder().readTimeout(90,TimeUnit.SECONDS).pingInterval(30,TimeUnit.SECONDS).build()else http,jar)
         }
     }
     @Synchronized private fun retire(origin: String?): Retired {

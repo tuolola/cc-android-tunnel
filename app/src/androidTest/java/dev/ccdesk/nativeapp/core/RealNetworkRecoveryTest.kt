@@ -128,7 +128,7 @@ class RealNetworkRecoveryTest {
             val disabledAt = SystemClock.elapsedRealtime()
             save()
             withTimeout(10_000) { shell("svc wifi disable") }
-            withTimeout(45_000) {
+            withTimeout(75_000) {
                 var continuousLossAt: Long? = null
                 var confirmedLoss = false
                 while (true) {
