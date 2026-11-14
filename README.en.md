@@ -17,7 +17,7 @@
 </p>
 
 <p>
-  <a href="#quick-start"><img src="https://img.shields.io/badge/Quick%20Start-Build%20Locally-2563eb?style=for-the-badge" alt="Build locally" /></a>
+  <a href="#quick-start"><img src="https://img.shields.io/badge/Setup-VPS%20to%20Android-2563eb?style=for-the-badge" alt="Set up the server, desktop and phone" /></a>
   <a href="#verification"><img src="https://img.shields.io/badge/Verification-Tests%20%26%20Audit-0f766e?style=for-the-badge" alt="Tests and audit" /></a>
   <a href="https://github.com/sun168567/cc-desk-tunnel"><img src="https://img.shields.io/badge/Origin-cc--desk--tunnel-475569?style=for-the-badge" alt="Upstream project" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-Apache--2.0-7c3aed?style=for-the-badge" alt="Apache-2.0 License" /></a>
@@ -40,7 +40,29 @@
 
 The launcher and in-app display name is **CCtunnel**; the project name is **CC Android Tunnel**.
 
+**Use this app to operate your own CC Desk Tunnel workbench from an Android phone.** Start a project session on your computer, then use your phone to send requests, follow streamed replies and tool output, respond to supported approvals, or stop and resume work. You can also create ordinary sessions that execute on the server.
+
 **CC Android Tunnel is an independently maintained, unofficial native port based on [sun168567/cc-desk-tunnel](https://github.com/sun168567/cc-desk-tunnel).** It is not an official upstream Android release; no upstream endorsement is implied.
+
+### How the three parts work together
+
+| Component | Installed on | Responsibility |
+| --- | --- | --- |
+| Upstream cc-desk-tunnel server | Your Linux VPS | Runs Claude Code, stores sessions and model credentials, and connects your devices |
+| Upstream CC Desk Tunnel desktop client | Your project computer | Selects local projects and establishes the execution channel for commands and file access on that computer |
+| This CCtunnel Android app | Your Android phone | Controls sessions through the same server; it does not run the computer's development tools on the phone |
+
+```mermaid
+flowchart LR
+    Phone[Android: CCtunnel] <-->|WSS or HTTPS workbench API| Server[VPS: cc-desk-tunnel + Claude Code]
+    Desktop[Windows: upstream desktop client] <-->|Outbound encrypted execution channel| Server
+    Desktop --> Project[Computer project files and tools]
+    Server --> Model[Model service: your own account or API credential]
+```
+
+To work on a **computer project**, create its session in the desktop client and open that existing session on the phone. The computer must remain powered on, online and connected through the desktop client. The phone can use a different network. An ordinary session **created directly on the phone runs in the server container**; it does not automatically use the computer's project or upload phone files.
+
+Upstream supplies the server and desktop execution channel; this repository supplies the native Android interface. VPS hosting and model usage are separate costs. See the [upstream architecture](https://github.com/sun168567/cc-desk-tunnel/blob/v0.3.14/docs/architecture.md).
 
 This repository contains a standalone Android project. Its UI, networking, Markdown and code rendering run natively, without React Native, Expo, Hermes, Metro, a JavaScript business runtime or a WebView-hosted interface. Building and running the client does not require Node.js.
 
@@ -89,6 +111,151 @@ The table describes the native implementation. Server capabilities and permissio
 
 ## Quick Start
 
+This walkthrough uses an **Ubuntu 24.04 LTS x86_64 VPS, Windows 10/11 x64 computer and Android 7.0+ phone**. Already have a working server and connected desktop? Start with step 6. A more detailed [Chinese walkthrough](./README.md#快速开始) includes per-step success checks.
+
+**Compatibility checked November 14, 2026:** the example pins the upstream server and desktop to [v0.3.14](https://github.com/sun168567/cc-desk-tunnel/releases/tag/v0.3.14), which uses protocol **25**. This app's `1.0.x-native` version is independent. Keep upstream desktop/server versions aligned, and check protocol compatibility before upgrading; a future latest release is not automatically compatible.
+
+### 1. Get a VPS and prepare your devices
+
+In your computer's browser, compare Linux VPS plans from these official sites:
+
+| Provider | Official site | Product |
+| --- | --- | --- |
+| RackNerd | [racknerd.com](https://www.racknerd.com/) | Linux KVM VPS |
+| Vultr | [vultr.com](https://www.vultr.com/) | Cloud Compute; [official provisioning guide](https://docs.vultr.com/products/compute/instances/cloud-compute/provisioning) |
+| DigitalOcean | [digitalocean.com](https://www.digitalocean.com/products/droplets) | Linux Droplet |
+| Hetzner | [hetzner.com](https://www.hetzner.com/cloud/) | Cloud Server |
+
+Choose Ubuntu 24.04 LTS, x86_64/amd64 and a public IPv4 address. This tutorial suggests starting with **2 vCPU, 2 GB RAM and 25 GB SSD** for operating headroom; this is a recommendation, not an upstream minimum. Computer-side builds do not require a GPU on the VPS. Server-side builds may need more resources. Check current prices, renewals, transfer allowances, IPv4 charges and refund terms before paying. These links have no referral parameters.
+
+The VPS must reach GitHub, GHCR and your model provider, and your computer/phone must reach the VPS. Both your eligibility and deployment must comply with the provider's [supported-regions policy](https://www.anthropic.com/legal/supported-regions) and [terms](https://code.claude.com/docs/en/legal-and-compliance); buying a VPS alone does not grant eligibility or model access. Save its IP, SSH port, username and SSH key/password. Have your own model account or API credentials ready. A domain is optional for the direct-IP path below.
+
+### 2. Connect to the VPS and install Docker
+
+From Windows PowerShell:
+
+```powershell
+ssh root@YOUR_VPS_IP
+```
+
+Use your provider's actual username, such as `ubuntu`, and `ssh -p PORT USER@IP` for a nonstandard SSH port. Verify the SSH host identity. After connecting, run Linux commands on the VPS:
+
+```bash
+cat /etc/os-release
+uname -m
+sudo apt update
+sudo apt install -y ca-certificates curl
+```
+
+For a fresh VPS, follow [Docker's official Ubuntu apt installation steps](https://docs.docker.com/engine/install/ubuntu/#install-using-the-apt-repository): configure the repository, install Engine and the Compose plugin, then verify. An existing Docker host should be inspected before changing its installation.
+
+```bash
+sudo docker version
+sudo docker compose version
+sudo docker run --rm hello-world
+```
+
+Continue when the daemon and Compose report versions and the test container exits successfully. The upstream installer checks dependencies but does not install Docker for you.
+
+### 3. Deploy the upstream server
+
+On the VPS, use the [upstream deployment manual](https://github.com/sun168567/cc-desk-tunnel/blob/v0.3.14/deploy/README.md) and the pinned official installer:
+
+```bash
+curl -fL https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/v0.3.14/deploy/install.sh -o cc-desk-install.sh
+less cc-desk-install.sh
+sudo env CC_DESK_TUNNEL_VERSION=0.3.14 bash cc-desk-install.sh
+```
+
+Press `q` to leave `less` before running the last command. These are new-deployment instructions; do not downgrade an existing installation just to match the example.
+
+In the wizard, confirm your public IP, select self-signed TLS for this direct-IP example, retain port **8787** and the default data directory **`/srv/cc-desk-tunnel`**, and leave the credential input empty to generate a random secret. Existing domain/CA/nginx deployments should follow their corresponding upstream instructions. The program normally installs under `/opt/cc-desk-tunnel`.
+
+Save the final **WSS address**, **SHA-256 leaf-certificate fingerprint** and **service credential**. Example address: `wss://203.0.113.10:8787/ws`; replace the documentation IP with yours. Obtain the fingerprint from your own trusted SSH session.
+
+Allow **8787/TCP** through the provider's security group and check the host firewall. Retain the SSH port used for administration. Do not open every port, the obsolete port 7000, or inbound Windows ports. Docker-published ports may bypass UFW; see [upstream security boundaries](https://github.com/sun168567/cc-desk-tunnel/blob/v0.3.14/docs/deployment.md). In nginx mode expose 443 instead and retain a loopback-only backend.
+
+```bash
+sudo cc-desk-tunnel status
+sudo cc-desk-tunnel summary
+```
+
+Continue when the service is running and you have all three connection values. `summary` includes secrets: do not publish its output. The service credential controls this workbench and can authorize operations on connected computers.
+
+### 4. Connect the Windows desktop client
+
+On your project computer:
+
+1. Download `CC-Desk-Tunnel-Setup-0.3.14-x64.exe` and `SHA256SUMS` from the [upstream v0.3.14 release](https://github.com/sun168567/cc-desk-tunnel/releases/tag/v0.3.14).
+2. Compare `Get-FileHash .\CC-Desk-Tunnel-Setup-0.3.14-x64.exe -Algorithm SHA256` with that release's checksum list, then install. The Windows installer includes PowerShell 7 and OpenSSH; see the [upstream desktop guide](https://github.com/sun168567/cc-desk-tunnel/tree/v0.3.14#图形客户端).
+3. Enter the server's WSS address, verified certificate fingerprint and service credential. For a publicly trusted CA certificate, normally leave the fingerprint empty.
+4. Wait until the workbench is connected and the computer's execution channel is ready. Windows connects outbound; router port forwarding is unnecessary.
+
+### 5. Configure model access and create a computer session
+
+Use the desktop account page to complete your own supported official Claude login, following [upstream's account instructions](https://github.com/sun168567/cc-desk-tunnel/tree/v0.3.14#3-登录-claude). The account needs permission and available quota; credentials are stored on the server.
+
+Alternatively, for API-based access, configure the provider-supported environment settings in `<DATA_DIRECTORY>/config/provider.json` on the VPS, following [upstream model configuration](https://github.com/sun168567/cc-desk-tunnel/blob/v0.3.14/deploy/README.md#模型与可写空间). The default is `/srv/cc-desk-tunnel/config/provider.json`. Preserve valid JSON, run `sudo cc-desk-tunnel restart` on the VPS, and verify model/account status in the desktop client. Do not enter a model API key in the phone's service-credential field.
+
+In the desktop client, add a test project such as `D:\Projects\hello-tunnel`, create a session named `Mobile check`, and ask: `List the files in the current project root and report the working directory. Do not modify files.` Verify that the directory and files belong to this Windows computer.
+
+Keep the three credentials separate: **SSH key/password** manages the VPS; **service credential** connects clients to cc-desk-tunnel; **model account/API key** lets the server call the model provider.
+
+### 6. Install CCtunnel on Android
+
+Check [this project's Releases](https://github.com/tuolola/cc-android-tunnel/releases) for a published APK. If the desired version has none, use [Build the Android App](#build-the-android-app) below to produce `CCtunnel.apk`. Upstream Windows/macOS/Linux downloads are not phone packages.
+
+Transfer an APK from this project's release or your own build to the phone and install it. With USB debugging enabled, you can alternatively run `adb install -r .\artifacts\CCtunnel.apk` on the development computer. Open **CCtunnel** and its connection screen. The phone does not need Node, Docker or Android Studio.
+
+### 7. Connect the phone to the same server
+
+The main path uses direct WSS and does **not** require upstream Web access to be enabled. In **连接工作台**, select **使用服务地址直连** if currently in HTTPS mode:
+
+| App field | Value |
+| --- | --- |
+| 服务地址 | Full `wss://YOUR_VPS_IP:8787/ws`, or the domain address given by your nginx deployment. Do not use phone localhost, a Windows LAN IP or an SSH address |
+| 服务证书指纹（可选） | Trusted SHA-256 leaf fingerprint for self-signed TLS; normally empty for a system-trusted CA. This is not the SSH host fingerprint |
+| 服务凭据 | The complete random workbench credential, not a VPS password, Claude password or model API key |
+
+Tap **连接**, open the session list and choose the existing `Mobile check` session. Confirm its desktop history appears. To work on that computer project, use this session: creating a new ordinary session on the phone instead targets the Linux server container.
+
+Direct WSS authenticates using the service credential. HTTPS uses Web login, cookies and optional TOTP; enabling Web TOTP does not add a TOTP challenge to the direct WSS endpoint.
+
+### 8. Continue a computer task from the phone
+
+1. Keep the VPS and desktop client connected, and keep the project computer awake. The desktop client may remain in the tray.
+2. On the phone, open `Mobile check` and send: `Create mobile-check.txt in this test project containing Hello from Android. If it exists, tell me first; do not overwrite it.`
+3. Watch the streamed response and tool activity. Read any approval before responding. Not all real approval flows have completed acceptance testing; use the desktop if a request cannot be handled on the phone.
+4. Check the file and its contents on the computer. This verifies the phone → VPS → desktop execution path.
+5. Reopen the same session to continue later. Use stop/resume as available. After a network interruption, inspect existing results before repeating a request that changes files.
+
+A server-only session does not need the Windows computer online, but the server container must have that task's files and tools.
+
+### Optional: HTTPS workbench login
+
+Follow the [upstream Web-access guide](https://github.com/sun168567/cc-desk-tunnel/blob/v0.3.14/docs/server-web.md): enable **设置 → 浏览器访问** in the desktop client and copy its complete HTTPS address, including any custom path. In the phone's connection screen choose **浏览器访问**, enter that address in **HTTPS 入口地址**, configure certificate trust, and connect. Enter the workbench service credential as **工作台密码**, plus the current six-digit code if TOTP is enabled. Do not append `/ws` or manually construct `/api/ws`.
+
+Use the new full URL after a domain/path change. For domains and reverse proxies see [upstream nginx setup](https://github.com/sun168567/cc-desk-tunnel/blob/v0.3.14/deploy/nginx.md). “Browser access” names the upstream authentication interface; the Android UI remains native Compose, without WebView rendering.
+
+### Troubleshooting and maintenance
+
+| Symptom | Check |
+| --- | --- |
+| Timeout | VPS status, public address/port, provider and host firewalls, and phone-to-VPS connectivity |
+| Certificate failure | Correct fingerprint for the actual endpoint, certificate rotation/expiry and phone time; do not disable TLS verification |
+| Credential rejection | Complete workbench credential, not SSH/model credentials; update all clients after rotation |
+| HTTPS 404 or missing login information | Web access enabled, exact domain and configured path; direct WSS uses root `/ws` |
+| History loads but computer commands fail | Computer awake and online, desktop execution channel ready, correct session ownership |
+| New phone session cannot find a Windows path | It is a server session; create the project session on the desktop and open it on the phone |
+| Connected but model requests fail | Model login, quota, provider configuration and outbound server connectivity |
+| Version mismatch | App protocol 25 compatibility; do not upgrade or downgrade blindly |
+
+On the VPS use `sudo cc-desk-tunnel status`, `sudo cc-desk-tunnel logs` and `sudo cc-desk-tunnel summary`. Before upgrades or certificate changes, stop active work, back up and follow [upstream maintenance](https://github.com/sun168567/cc-desk-tunnel/blob/v0.3.14/deploy/README.md#运维). Backups contain secrets and history. Android APK updates are independent of upstream desktop/server updates.
+
+## Build the Android App
+
+These commands run on a development computer to obtain an APK; they do not deploy the VPS server.
+
 ### 1. Prepare the environment
 
 - JDK **17 or 21**, with `JAVA_HOME` configured.
@@ -122,11 +289,7 @@ Alternatively, configure `sdk.dir` in the untracked `local.properties` and run G
 
 On macOS/Linux, use `./gradlew` instead. Direct Gradle output is **`app/build/outputs/apk/debug/app-debug.apk`**. `:app:assembleRelease` produces an unsigned release APK; configure your own signing before distributing it.
 
-### 3. Connect your workbench
-
-Open the app's connection settings and enter either the HTTPS workbench address or the supported direct WSS service address. Supply the corresponding password/TOTP or service token. Direct service addresses use the `/ws` path.
-
-Use system CA verification for a trusted certificate, or configure the server's verified SHA-256 certificate fingerprint for the intended host. Obtain that fingerprint from your service administrator. No service URL, password or token is bundled with the app.
+After installation, return to step 7 above. No service URL, password or token is bundled with the app.
 
 ## Verification
 
