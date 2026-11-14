@@ -35,7 +35,7 @@ class OpenSourceScreenTest {
             compose.onNodeWithText("开源许可与致谢").assertIsDisplayed().performClick()
             compose.onNodeWithText("开源许可与致谢").assertIsDisplayed()
             compose.onNodeWithContentDescription("打开上游项目：https://github.com/sun168567/cc-desk-tunnel").assertHasClickAction()
-            compose.onNodeWithContentDescription("打开本项目仓库：https://github.com/tuolola/cc-desk-Android").assertHasClickAction()
+            compose.onNodeWithContentDescription("打开本项目仓库：https://github.com/tuolola/cc-android-tunnel").assertHasClickAction()
             compose.runOnIdle {
                 assertTrue(views().filterIsInstance<TextView>().any { it.text.toString().contains("非上游官方发行") })
             }

@@ -3,7 +3,7 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.VIBRATE" />
-    <application android:allowBackup="false" android:dataExtractionRules="@xml/data_extraction_rules" android:fullBackupContent="false" android:label="CC 工作台 · 原生" android:icon="@mipmap/ic_launcher"
+    <application android:allowBackup="false" android:dataExtractionRules="@xml/data_extraction_rules" android:fullBackupContent="false" android:label="CC Android Tunnel" android:icon="@mipmap/ic_launcher"
         android:supportsRtl="true" android:usesCleartextTraffic="false" android:theme="@style/AppTheme">
         <activity android:name=".MainActivity" android:exported="true" android:windowSoftInputMode="adjustResize"
             android:launchMode="singleTask" android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|uiMode|smallestScreenSize"
@@ -16,6 +16,8 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="cc-android-tunnel" />
+                <!-- Retain existing deep links for installed clients. -->
                 <data android:scheme="ccdesk" />
             </intent-filter>
         </activity>

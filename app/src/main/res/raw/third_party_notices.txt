@@ -1,4 +1,4 @@
-CC Desk Android — Third-party notices
+CC Android Tunnel — Third-party notices
 ======================================
 
 This document accompanies the native Android application. The application

@@ -1,0 +1,40 @@
+{
+  "captured_on": "2026-11-14",
+  "capture_type": "Native Android app running on an Android 14 emulator",
+  "build": "1.0.0-native, before the project rename",
+  "apk_sha256": "84d3b086da831dc852ecdfed5ca4ff763a8b072765e8a5d8f2e318a5d44d55dc",
+  "density_dpi": 640,
+  "font_scale": 1.0,
+  "content": "Dedicated English acceptance conversation; model catalog supplied by the test service. Multiline input uses the test keyboard.",
+  "image_processing": "None; byte-for-byte copies of original PNG captures.",
+  "files": [
+    {
+      "file": "chat-light.png",
+      "original_capture": "native-light-final.png",
+      "width": 1440,
+      "height": 2560,
+      "sha256": "aedeaabc3e7c3db88ebca4ec8c6543236a5969f7e5e8b769bf61f996fa9d14f8"
+    },
+    {
+      "file": "chat-dark.png",
+      "original_capture": "native-dark-hot-final.png",
+      "width": 1440,
+      "height": 2560,
+      "sha256": "3dbdf7ae42ef50c4f2f7e28b9a0dee0c1ccb499e4e7cab54c5201a930a40c12d"
+    },
+    {
+      "file": "model-picker.png",
+      "original_capture": "native-model-light.png",
+      "width": 1440,
+      "height": 2560,
+      "sha256": "897bf128a7f7dee119139f2f9869fb77b95f475833b0fe10a05ca2b3c543203e"
+    },
+    {
+      "file": "multiline-input.png",
+      "original_capture": "native-keyboard-multiline.png",
+      "width": 1440,
+      "height": 2560,
+      "sha256": "94502cf4bf127b426c7d1300c25d5f48ec6465f0eab84de0afc82fce2219259e"
+    }
+  ]
+}

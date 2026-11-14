@@ -1,4 +1,4 @@
-// Copyright 2026 CC Desk Android contributors.
+// Copyright 2026 CC Android Tunnel contributors.
 // Native Android rewrite/adaptation of CC Desk Tunnel, modified in 2026.
 // Apache-2.0; upstream attribution and third-party exceptions are listed in NOTICE.
 
@@ -41,7 +41,7 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); routeIntent(intent) }
     private fun routeIntent(intent: Intent?) {
         val uri = intent?.data ?: return
-        if (intent.action != Intent.ACTION_VIEW || uri.scheme != "ccdesk") return
+        if (intent.action != Intent.ACTION_VIEW || uri.scheme !in setOf("cc-android-tunnel", "ccdesk")) return
         val route = (uri.host.orEmpty() + uri.path.orEmpty()).trim('/')
         if (route in setOf("", "settings", "connection", "usage", "access", "notifications", "help", "chats")) model.requestedRoute = route
     }

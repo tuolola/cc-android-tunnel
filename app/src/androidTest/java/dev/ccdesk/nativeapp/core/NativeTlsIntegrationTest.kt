@@ -240,7 +240,7 @@ class NativeTlsIntegrationTest {
             awaitState(repo) { it.status == "online" }
             val auth = fixture.frame("auth",1)
             assertEquals(25,auth.getInt("protocolVersion")); assertEquals(fixture.serviceToken,auth.getString("token")); assertFalse(auth.getBoolean("tunnel"))
-            assertEquals("CC Desk Tunnel · Android",auth.getString("deviceName"))
+            assertEquals("CC Android Tunnel",auth.getString("deviceName"))
             val identity = fixture.frame("device",1).getString("id")
             assertTrue(identity.isNotBlank())
             assertNull(fixture.requests.single { it.path == "/ws" }.origin)

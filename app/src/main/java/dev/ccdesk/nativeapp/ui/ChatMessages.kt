@@ -1,4 +1,4 @@
-// Copyright 2026 CC Desk Android contributors.
+// Copyright 2026 CC Android Tunnel contributors.
 // Native Android rewrite/adaptation of CC Desk Tunnel, modified in 2026.
 // Apache-2.0; upstream attribution and third-party exceptions are listed in NOTICE.
 

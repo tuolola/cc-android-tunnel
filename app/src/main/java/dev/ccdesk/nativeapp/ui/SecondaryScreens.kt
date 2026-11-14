@@ -1,4 +1,4 @@
-// Copyright 2026 CC Desk Android contributors.
+// Copyright 2026 CC Android Tunnel contributors.
 // Native Android rewrite/adaptation of CC Desk Tunnel, modified in 2026.
 // Apache-2.0; upstream attribution and third-party exceptions are listed in NOTICE.
 
@@ -762,11 +762,11 @@ private val licenseDocuments = listOf(
     val context = LocalContext.current
     var linkError by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        SNativeText("CC Desk Android", size = 17, lineHeight = 24, weight = FontWeight.SemiBold, heading = true)
+        SNativeText("CC Android Tunnel", size = 17, lineHeight = 24, weight = FontWeight.SemiBold, heading = true)
         SNativeText("基于 sun168567/cc-desk-tunnel（Apache License 2.0）开发的独立 Android 客户端。本项目非上游官方发行，与上游项目无隶属或背书关系。", size = 14, lineHeight = 22, selectable = true)
     }
     SSection("项目来源") {
-        listOf("上游项目" to "https://github.com/sun168567/cc-desk-tunnel", "本项目仓库" to "https://github.com/tuolola/cc-desk-Android").forEachIndexed { index, (label, url) ->
+        listOf("上游项目" to "https://github.com/sun168567/cc-desk-tunnel", "本项目仓库" to "https://github.com/tuolola/cc-android-tunnel").forEachIndexed { index, (label, url) ->
             SRow(label, url, "globe", last = index == 1, accessibilityLabel = "打开$label：$url", onClick = {
                 linkError = runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }.isFailure
             })

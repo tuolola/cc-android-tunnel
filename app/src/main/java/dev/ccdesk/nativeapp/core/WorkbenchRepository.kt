@@ -1,4 +1,4 @@
-// Copyright 2026 CC Desk Android contributors.
+// Copyright 2026 CC Android Tunnel contributors.
 // Native Android rewrite/adaptation of CC Desk Tunnel, modified in 2026.
 // Apache-2.0; upstream attribution and third-party exceptions are listed in NOTICE.
 
@@ -162,7 +162,7 @@ class WorkbenchRepository(private val transport: WorkbenchTransport, private val
         val deviceId = transport.deviceId()
         loadPreferences(endpoint,ticket)
         if (ticket != generation) return
-        attach(endpoint,true,json("type" to "auth","protocolVersion" to PROTOCOL_VERSION,"token" to token,"deviceName" to "CC Desk Tunnel · Android","tunnel" to false),ticket,deviceId)
+        attach(endpoint,true,json("type" to "auth","protocolVersion" to PROTOCOL_VERSION,"token" to token,"deviceName" to "CC Android Tunnel","tunnel" to false),ticket,deviceId)
     }
     private suspend fun attach(url: String, direct: Boolean, greeting: JSONObject, ticket: Long, deviceId: String? = null) {
         val connected = CompletableDeferred<SocketConnection>()
