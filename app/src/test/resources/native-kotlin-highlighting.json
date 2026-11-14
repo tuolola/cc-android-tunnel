@@ -1,0 +1,1287 @@
+[
+  {
+    "code": "fun main() {\n    val message = \"Hello from Android\"\n    println(message)\n}",
+    "tokens": [
+      {
+        "start": 0,
+        "end": 3,
+        "kinds": [
+          "function",
+          "keyword"
+        ],
+        "light": "#d73a49",
+        "dark": "#96cbfe"
+      },
+      {
+        "start": 3,
+        "end": 4,
+        "kinds": [
+          "function"
+        ],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 4,
+        "end": 8,
+        "kinds": [
+          "function",
+          "title"
+        ],
+        "light": "#6f42c1",
+        "dark": "#ffffb6"
+      },
+      {
+        "start": 8,
+        "end": 10,
+        "kinds": [
+          "function",
+          "params"
+        ],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 10,
+        "end": 17,
+        "kinds": [],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 17,
+        "end": 20,
+        "kinds": [
+          "keyword"
+        ],
+        "light": "#d73a49",
+        "dark": "#96cbfe"
+      },
+      {
+        "start": 20,
+        "end": 31,
+        "kinds": [],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 31,
+        "end": 51,
+        "kinds": [
+          "string"
+        ],
+        "light": "#032f62",
+        "dark": "#a8ff60"
+      },
+      {
+        "start": 51,
+        "end": 74,
+        "kinds": [],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      }
+    ]
+  },
+  {
+    "code": "fun greet(name: String, count: Int = 2): String = name",
+    "tokens": [
+      {
+        "start": 0,
+        "end": 3,
+        "kinds": [
+          "function",
+          "keyword"
+        ],
+        "light": "#d73a49",
+        "dark": "#96cbfe"
+      },
+      {
+        "start": 3,
+        "end": 4,
+        "kinds": [
+          "function"
+        ],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 4,
+        "end": 9,
+        "kinds": [
+          "function",
+          "title"
+        ],
+        "light": "#6f42c1",
+        "dark": "#ffffb6"
+      },
+      {
+        "start": 9,
+        "end": 16,
+        "kinds": [
+          "function",
+          "params"
+        ],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 16,
+        "end": 22,
+        "kinds": [
+          "function",
+          "params",
+          "type"
+        ],
+        "light": "#d73a49",
+        "dark": "#ffffb6"
+      },
+      {
+        "start": 22,
+        "end": 31,
+        "kinds": [
+          "function",
+          "params"
+        ],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 31,
+        "end": 34,
+        "kinds": [
+          "function",
+          "params",
+          "type"
+        ],
+        "light": "#d73a49",
+        "dark": "#ffffb6"
+      },
+      {
+        "start": 34,
+        "end": 37,
+        "kinds": [
+          "function",
+          "params"
+        ],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 37,
+        "end": 38,
+        "kinds": [
+          "function",
+          "params",
+          "number"
+        ],
+        "light": "#005cc5",
+        "dark": "#ff73fd"
+      },
+      {
+        "start": 38,
+        "end": 39,
+        "kinds": [
+          "function",
+          "params"
+        ],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 39,
+        "end": 54,
+        "kinds": [],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      }
+    ]
+  },
+  {
+    "code": "data class Person<T>(val name: String) : Any()\nval n: Int = 42\nval done = true\nval nothing = null",
+    "tokens": [
+      {
+        "start": 0,
+        "end": 4,
+        "kinds": [
+          "keyword"
+        ],
+        "light": "#d73a49",
+        "dark": "#96cbfe"
+      },
+      {
+        "start": 4,
+        "end": 5,
+        "kinds": [],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 5,
+        "end": 10,
+        "kinds": [
+          "class",
+          "keyword"
+        ],
+        "light": "#d73a49",
+        "dark": "#96cbfe"
+      },
+      {
+        "start": 10,
+        "end": 11,
+        "kinds": [
+          "class"
+        ],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 11,
+        "end": 17,
+        "kinds": [
+          "class",
+          "title"
+        ],
+        "light": "#6f42c1",
+        "dark": "#ffffb6"
+      },
+      {
+        "start": 17,
+        "end": 18,
+        "kinds": [
+          "class"
+        ],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 18,
+        "end": 19,
+        "kinds": [
+          "class",
+          "type"
+        ],
+        "light": "#d73a49",
+        "dark": "#ffffb6"
+      },
+      {
+        "start": 19,
+        "end": 20,
+        "kinds": [
+          "class"
+        ],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 20,
+        "end": 21,
+        "kinds": [],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 21,
+        "end": 24,
+        "kinds": [
+          "keyword"
+        ],
+        "light": "#d73a49",
+        "dark": "#96cbfe"
+      },
+      {
+        "start": 24,
+        "end": 47,
+        "kinds": [],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 47,
+        "end": 50,
+        "kinds": [
+          "keyword"
+        ],
+        "light": "#d73a49",
+        "dark": "#96cbfe"
+      },
+      {
+        "start": 50,
+        "end": 54,
+        "kinds": [],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 54,
+        "end": 57,
+        "kinds": [
+          "built_in"
+        ],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 57,
+        "end": 60,
+        "kinds": [],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 60,
+        "end": 62,
+        "kinds": [
+          "number"
+        ],
+        "light": "#005cc5",
+        "dark": "#ff73fd"
+      },
+      {
+        "start": 62,
+        "end": 63,
+        "kinds": [],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 63,
+        "end": 66,
+        "kinds": [
+          "keyword"
+        ],
+        "light": "#d73a49",
+        "dark": "#96cbfe"
+      },
+      {
+        "start": 66,
+        "end": 74,
+        "kinds": [],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 74,
+        "end": 78,
+        "kinds": [
+          "literal"
+        ],
+        "light": "#0086b3",
+        "dark": "#c6c5fe"
+      },
+      {
+        "start": 78,
+        "end": 79,
+        "kinds": [],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 79,
+        "end": 82,
+        "kinds": [
+          "keyword"
+        ],
+        "light": "#d73a49",
+        "dark": "#96cbfe"
+      },
+      {
+        "start": 82,
+        "end": 93,
+        "kinds": [],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 93,
+        "end": 97,
+        "kinds": [
+          "literal"
+        ],
+        "light": "#0086b3",
+        "dark": "#c6c5fe"
+      }
+    ]
+  },
+  {
+    "code": "inline fun <reified T> List<T>.mapIt(transform: (T) -> String): List<String> = map(transform)",
+    "tokens": [
+      {
+        "start": 0,
+        "end": 6,
+        "kinds": [
+          "keyword"
+        ],
+        "light": "#d73a49",
+        "dark": "#96cbfe"
+      },
+      {
+        "start": 6,
+        "end": 7,
+        "kinds": [],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 7,
+        "end": 10,
+        "kinds": [
+          "function",
+          "keyword"
+        ],
+        "light": "#d73a49",
+        "dark": "#96cbfe"
+      },
+      {
+        "start": 10,
+        "end": 11,
+        "kinds": [
+          "function"
+        ],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 11,
+        "end": 12,
+        "kinds": [
+          "function",
+          "type"
+        ],
+        "light": "#d73a49",
+        "dark": "#ffffb6"
+      },
+      {
+        "start": 12,
+        "end": 19,
+        "kinds": [
+          "function",
+          "type",
+          "keyword"
+        ],
+        "light": "#d73a49",
+        "dark": "#96cbfe"
+      },
+      {
+        "start": 19,
+        "end": 22,
+        "kinds": [
+          "function",
+          "type"
+        ],
+        "light": "#d73a49",
+        "dark": "#ffffb6"
+      },
+      {
+        "start": 22,
+        "end": 27,
+        "kinds": [
+          "function"
+        ],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 27,
+        "end": 30,
+        "kinds": [
+          "function",
+          "type"
+        ],
+        "light": "#d73a49",
+        "dark": "#ffffb6"
+      },
+      {
+        "start": 30,
+        "end": 31,
+        "kinds": [
+          "function"
+        ],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 31,
+        "end": 36,
+        "kinds": [
+          "function",
+          "title"
+        ],
+        "light": "#6f42c1",
+        "dark": "#ffffb6"
+      },
+      {
+        "start": 36,
+        "end": 49,
+        "kinds": [
+          "function",
+          "params"
+        ],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 49,
+        "end": 50,
+        "kinds": [
+          "function",
+          "params",
+          "type"
+        ],
+        "light": "#d73a49",
+        "dark": "#ffffb6"
+      },
+      {
+        "start": 50,
+        "end": 55,
+        "kinds": [
+          "function",
+          "params"
+        ],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 55,
+        "end": 61,
+        "kinds": [
+          "function",
+          "params",
+          "type"
+        ],
+        "light": "#d73a49",
+        "dark": "#ffffb6"
+      },
+      {
+        "start": 61,
+        "end": 62,
+        "kinds": [
+          "function",
+          "params"
+        ],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 62,
+        "end": 93,
+        "kinds": [],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      }
+    ]
+  },
+  {
+    "code": "@file:JvmName(\"Demo\")\n@Deprecated(\"Use new()\")\nfun old() = new()",
+    "tokens": [
+      {
+        "start": 0,
+        "end": 13,
+        "kinds": [
+          "meta"
+        ],
+        "light": "#969896",
+        "dark": "#7c7c7c"
+      },
+      {
+        "start": 13,
+        "end": 14,
+        "kinds": [],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 14,
+        "end": 20,
+        "kinds": [
+          "string"
+        ],
+        "light": "#032f62",
+        "dark": "#a8ff60"
+      },
+      {
+        "start": 20,
+        "end": 22,
+        "kinds": [],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 22,
+        "end": 34,
+        "kinds": [
+          "meta"
+        ],
+        "light": "#969896",
+        "dark": "#7c7c7c"
+      },
+      {
+        "start": 34,
+        "end": 45,
+        "kinds": [
+          "meta",
+          "meta-string"
+        ],
+        "light": "#969896",
+        "dark": "#7c7c7c"
+      },
+      {
+        "start": 45,
+        "end": 46,
+        "kinds": [
+          "meta"
+        ],
+        "light": "#969896",
+        "dark": "#7c7c7c"
+      },
+      {
+        "start": 46,
+        "end": 47,
+        "kinds": [],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 47,
+        "end": 50,
+        "kinds": [
+          "function",
+          "keyword"
+        ],
+        "light": "#d73a49",
+        "dark": "#96cbfe"
+      },
+      {
+        "start": 50,
+        "end": 51,
+        "kinds": [
+          "function"
+        ],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 51,
+        "end": 54,
+        "kinds": [
+          "function",
+          "title"
+        ],
+        "light": "#6f42c1",
+        "dark": "#ffffb6"
+      },
+      {
+        "start": 54,
+        "end": 56,
+        "kinds": [
+          "function",
+          "params"
+        ],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 56,
+        "end": 64,
+        "kinds": [],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      }
+    ]
+  },
+  {
+    "code": "val s = \"hello $name ${1 + thing(2)}\"\nval raw = \"\"\"$word ${value}\"\"\"",
+    "tokens": [
+      {
+        "start": 0,
+        "end": 3,
+        "kinds": [
+          "keyword"
+        ],
+        "light": "#d73a49",
+        "dark": "#96cbfe"
+      },
+      {
+        "start": 3,
+        "end": 8,
+        "kinds": [],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 8,
+        "end": 15,
+        "kinds": [
+          "string"
+        ],
+        "light": "#032f62",
+        "dark": "#a8ff60"
+      },
+      {
+        "start": 15,
+        "end": 20,
+        "kinds": [
+          "string",
+          "variable"
+        ],
+        "light": "#df5000",
+        "dark": "#c6c5fe"
+      },
+      {
+        "start": 20,
+        "end": 21,
+        "kinds": [
+          "string"
+        ],
+        "light": "#032f62",
+        "dark": "#a8ff60"
+      },
+      {
+        "start": 21,
+        "end": 23,
+        "kinds": [
+          "string",
+          "subst"
+        ],
+        "light": "#032f62",
+        "dark": "#daefa3"
+      },
+      {
+        "start": 23,
+        "end": 24,
+        "kinds": [
+          "string",
+          "subst",
+          "number"
+        ],
+        "light": "#005cc5",
+        "dark": "#ff73fd"
+      },
+      {
+        "start": 24,
+        "end": 33,
+        "kinds": [
+          "string",
+          "subst"
+        ],
+        "light": "#032f62",
+        "dark": "#daefa3"
+      },
+      {
+        "start": 33,
+        "end": 34,
+        "kinds": [
+          "string",
+          "subst",
+          "number"
+        ],
+        "light": "#005cc5",
+        "dark": "#ff73fd"
+      },
+      {
+        "start": 34,
+        "end": 36,
+        "kinds": [
+          "string",
+          "subst"
+        ],
+        "light": "#032f62",
+        "dark": "#daefa3"
+      },
+      {
+        "start": 36,
+        "end": 37,
+        "kinds": [
+          "string"
+        ],
+        "light": "#032f62",
+        "dark": "#a8ff60"
+      },
+      {
+        "start": 37,
+        "end": 38,
+        "kinds": [],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 38,
+        "end": 41,
+        "kinds": [
+          "keyword"
+        ],
+        "light": "#d73a49",
+        "dark": "#96cbfe"
+      },
+      {
+        "start": 41,
+        "end": 48,
+        "kinds": [],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 48,
+        "end": 51,
+        "kinds": [
+          "string"
+        ],
+        "light": "#032f62",
+        "dark": "#a8ff60"
+      },
+      {
+        "start": 51,
+        "end": 56,
+        "kinds": [
+          "string",
+          "variable"
+        ],
+        "light": "#df5000",
+        "dark": "#c6c5fe"
+      },
+      {
+        "start": 56,
+        "end": 57,
+        "kinds": [
+          "string"
+        ],
+        "light": "#032f62",
+        "dark": "#a8ff60"
+      },
+      {
+        "start": 57,
+        "end": 65,
+        "kinds": [
+          "string",
+          "subst"
+        ],
+        "light": "#032f62",
+        "dark": "#daefa3"
+      },
+      {
+        "start": 65,
+        "end": 68,
+        "kinds": [
+          "string"
+        ],
+        "light": "#032f62",
+        "dark": "#a8ff60"
+      }
+    ]
+  },
+  {
+    "code": "/** @param x value */\n/* outer /* inner */ tail */\nloop@ for (i in 0..3) { if (i == 2) break@loop }",
+    "tokens": [
+      {
+        "start": 0,
+        "end": 4,
+        "kinds": [
+          "comment"
+        ],
+        "light": "#969896",
+        "dark": "#7c7c7c"
+      },
+      {
+        "start": 4,
+        "end": 10,
+        "kinds": [
+          "comment",
+          "doctag"
+        ],
+        "light": "#969896",
+        "dark": "#ffffb6"
+      },
+      {
+        "start": 10,
+        "end": 21,
+        "kinds": [
+          "comment"
+        ],
+        "light": "#969896",
+        "dark": "#7c7c7c"
+      },
+      {
+        "start": 21,
+        "end": 22,
+        "kinds": [],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 22,
+        "end": 31,
+        "kinds": [
+          "comment"
+        ],
+        "light": "#969896",
+        "dark": "#7c7c7c"
+      },
+      {
+        "start": 31,
+        "end": 42,
+        "kinds": [
+          "comment",
+          "comment"
+        ],
+        "light": "#969896",
+        "dark": "#7c7c7c"
+      },
+      {
+        "start": 42,
+        "end": 50,
+        "kinds": [
+          "comment"
+        ],
+        "light": "#969896",
+        "dark": "#7c7c7c"
+      },
+      {
+        "start": 50,
+        "end": 51,
+        "kinds": [],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 51,
+        "end": 56,
+        "kinds": [
+          "symbol"
+        ],
+        "light": "#0086b3",
+        "dark": "#c6c5fe"
+      },
+      {
+        "start": 56,
+        "end": 57,
+        "kinds": [],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 57,
+        "end": 60,
+        "kinds": [
+          "keyword"
+        ],
+        "light": "#d73a49",
+        "dark": "#96cbfe"
+      },
+      {
+        "start": 60,
+        "end": 64,
+        "kinds": [],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 64,
+        "end": 66,
+        "kinds": [
+          "keyword"
+        ],
+        "light": "#d73a49",
+        "dark": "#96cbfe"
+      },
+      {
+        "start": 66,
+        "end": 67,
+        "kinds": [],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 67,
+        "end": 69,
+        "kinds": [
+          "number"
+        ],
+        "light": "#005cc5",
+        "dark": "#ff73fd"
+      },
+      {
+        "start": 69,
+        "end": 71,
+        "kinds": [
+          "number"
+        ],
+        "light": "#005cc5",
+        "dark": "#ff73fd"
+      },
+      {
+        "start": 71,
+        "end": 75,
+        "kinds": [],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 75,
+        "end": 77,
+        "kinds": [
+          "keyword"
+        ],
+        "light": "#d73a49",
+        "dark": "#96cbfe"
+      },
+      {
+        "start": 77,
+        "end": 84,
+        "kinds": [],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 84,
+        "end": 85,
+        "kinds": [
+          "number"
+        ],
+        "light": "#005cc5",
+        "dark": "#ff73fd"
+      },
+      {
+        "start": 85,
+        "end": 87,
+        "kinds": [],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 87,
+        "end": 92,
+        "kinds": [
+          "keyword"
+        ],
+        "light": "#d73a49",
+        "dark": "#96cbfe"
+      },
+      {
+        "start": 92,
+        "end": 97,
+        "kinds": [
+          "symbol"
+        ],
+        "light": "#0086b3",
+        "dark": "#c6c5fe"
+      },
+      {
+        "start": 97,
+        "end": 99,
+        "kinds": [],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      }
+    ]
+  },
+  {
+    "code": "fun `odd name`(v: String) = println(v)\nfun unclosed(",
+    "tokens": [
+      {
+        "start": 0,
+        "end": 3,
+        "kinds": [
+          "function",
+          "keyword"
+        ],
+        "light": "#d73a49",
+        "dark": "#96cbfe"
+      },
+      {
+        "start": 3,
+        "end": 14,
+        "kinds": [
+          "function"
+        ],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 14,
+        "end": 18,
+        "kinds": [
+          "function",
+          "params"
+        ],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 18,
+        "end": 24,
+        "kinds": [
+          "function",
+          "params",
+          "type"
+        ],
+        "light": "#d73a49",
+        "dark": "#ffffb6"
+      },
+      {
+        "start": 24,
+        "end": 25,
+        "kinds": [
+          "function",
+          "params"
+        ],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 25,
+        "end": 39,
+        "kinds": [],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 39,
+        "end": 42,
+        "kinds": [
+          "function",
+          "keyword"
+        ],
+        "light": "#d73a49",
+        "dark": "#96cbfe"
+      },
+      {
+        "start": 42,
+        "end": 43,
+        "kinds": [
+          "function"
+        ],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 43,
+        "end": 51,
+        "kinds": [
+          "function",
+          "title"
+        ],
+        "light": "#6f42c1",
+        "dark": "#ffffb6"
+      },
+      {
+        "start": 51,
+        "end": 52,
+        "kinds": [
+          "function",
+          "params"
+        ],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      }
+    ]
+  },
+  {
+    "code": "val n = 0xFFL + 1_000 + 2.5e-3F + .5 + 12u\nval c = 'x'",
+    "tokens": [
+      {
+        "start": 0,
+        "end": 3,
+        "kinds": [
+          "keyword"
+        ],
+        "light": "#d73a49",
+        "dark": "#96cbfe"
+      },
+      {
+        "start": 3,
+        "end": 8,
+        "kinds": [],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 8,
+        "end": 13,
+        "kinds": [
+          "number"
+        ],
+        "light": "#005cc5",
+        "dark": "#ff73fd"
+      },
+      {
+        "start": 13,
+        "end": 16,
+        "kinds": [],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 16,
+        "end": 21,
+        "kinds": [
+          "number"
+        ],
+        "light": "#005cc5",
+        "dark": "#ff73fd"
+      },
+      {
+        "start": 21,
+        "end": 24,
+        "kinds": [],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 24,
+        "end": 31,
+        "kinds": [
+          "number"
+        ],
+        "light": "#005cc5",
+        "dark": "#ff73fd"
+      },
+      {
+        "start": 31,
+        "end": 34,
+        "kinds": [],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 34,
+        "end": 36,
+        "kinds": [
+          "number"
+        ],
+        "light": "#005cc5",
+        "dark": "#ff73fd"
+      },
+      {
+        "start": 36,
+        "end": 43,
+        "kinds": [],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 43,
+        "end": 46,
+        "kinds": [
+          "keyword"
+        ],
+        "light": "#d73a49",
+        "dark": "#96cbfe"
+      },
+      {
+        "start": 46,
+        "end": 51,
+        "kinds": [],
+        "light": "#333333",
+        "dark": "#f8f8f8"
+      },
+      {
+        "start": 51,
+        "end": 54,
+        "kinds": [
+          "string"
+        ],
+        "light": "#032f62",
+        "dark": "#a8ff60"
+      }
+    ]
+  }
+]

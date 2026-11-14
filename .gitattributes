@@ -1,0 +1,22 @@
+* text=auto
+*.kt text eol=lf
+*.kts text eol=lf
+*.java text eol=lf
+*.xml text eol=lf
+*.properties text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.txt text eol=lf
+gradlew text eol=lf
+gradlew.bat text eol=crlf
+scripts/*.ps1 text eol=crlf
+scripts/*.py text eol=lf
+*.png binary
+*.jar binary
+.gitattributes text eol=lf
+.gitignore text eol=lf
+
+# Exclude generated Gradle wrappers; detect native sources and maintained scripts normally.
+/gradlew linguist-generated=true
+/gradlew.bat linguist-generated=true
+/gradle/wrapper/** linguist-generated=true
