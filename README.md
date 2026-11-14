@@ -24,7 +24,7 @@
 </p>
 
 <p>
-  <img src="https://img.shields.io/badge/版本-1.0.0--native-2563eb?style=flat-square" alt="版本 1.0.0-native" />
+  <img src="https://img.shields.io/badge/版本-1.0.1--native-2563eb?style=flat-square" alt="版本 1.0.1-native" />
   <img src="https://img.shields.io/badge/Kotlin-2.2.10-7f52ff?style=flat-square" alt="Kotlin 2.2.10" />
   <img src="https://img.shields.io/badge/UI-Jetpack%20Compose-4285f4?style=flat-square" alt="Jetpack Compose" />
   <img src="https://img.shields.io/badge/Android-7.0%2B-3ddc84?style=flat-square" alt="Android 7.0 及以上" />
@@ -37,6 +37,8 @@
 </div>
 
 ## 项目简介
+
+手机桌面与 App 内显示名称为 **CCtunnel**，项目名称为 **CC Android Tunnel**。
 
 **CC Android Tunnel 是基于 [sun168567/cc-desk-tunnel](https://github.com/sun168567/cc-desk-tunnel) 独立维护的非官方 Android 原生移植。** 它不是上游官方发布的 Android 版本，也不表示获得了上游背书。
 

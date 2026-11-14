@@ -24,7 +24,7 @@
 </p>
 
 <p>
-  <img src="https://img.shields.io/badge/Version-1.0.0--native-2563eb?style=flat-square" alt="Version 1.0.0-native" />
+  <img src="https://img.shields.io/badge/Version-1.0.1--native-2563eb?style=flat-square" alt="Version 1.0.1-native" />
   <img src="https://img.shields.io/badge/Kotlin-2.2.10-7f52ff?style=flat-square" alt="Kotlin 2.2.10" />
   <img src="https://img.shields.io/badge/UI-Jetpack%20Compose-4285f4?style=flat-square" alt="Jetpack Compose" />
   <img src="https://img.shields.io/badge/Android-7.0%2B-3ddc84?style=flat-square" alt="Android 7.0 and later" />
@@ -37,6 +37,8 @@
 </div>
 
 ## Overview
+
+The launcher and in-app display name is **CCtunnel**; the project name is **CC Android Tunnel**.
 
 **CC Android Tunnel is an independently maintained, unofficial native port based on [sun168567/cc-desk-tunnel](https://github.com/sun168567/cc-desk-tunnel).** It is not an official upstream Android release; no upstream endorsement is implied.
 
