@@ -193,7 +193,7 @@ class SecondaryInteractionTest {
         assertModelHeaderHitSlop(extent = 40, hitSlop = 3)
     }
 
-    @Test fun modelEntryTracksItsDynamicWidthWithThreeDpHitSlopAndExpandedState() {
+    @Test fun modelEntryTracksItsDynamicWidthWithAComposerSizedTouchTargetAndExpandedState() {
         val model = mutableStateOf("A")
         val expanded = mutableStateOf(false)
         val clicks = CopyOnWriteArrayList<Unit>()
@@ -213,7 +213,7 @@ class SecondaryInteractionTest {
         for (label in listOf("A", "Long model fixture")) {
             compose.runOnIdle { model.value = label }
             val entry = compose.onNodeWithContentDescription("选择模型，$label，思考强度Default")
-            entry.assertHeightIsEqualTo(35.dp)
+            entry.assertHeightIsEqualTo(32.dp)
                 .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
                 .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "已收起"))
             val bounds = entry.fetchSemanticsNode().boundsInRoot
@@ -224,8 +224,9 @@ class SecondaryInteractionTest {
             val scale = hostBounds.width / 320f
             for ((horizontal, direction) in listOf(true to 1f, true to -1f, false to 1f, false to -1f)) {
                 for (inside in listOf(true, false)) {
-                    val halfSize = if (horizontal) bounds.width / 2f else bounds.height / 2f
-                    val distance = direction * (halfSize + (3f + if (inside) -.5f else .5f) * scale)
+                    // Horizontally the pill accepts 3dp beyond its edge; vertically it accepts a 44dp target.
+                    val reach = if (horizontal) bounds.width / 2f + 3f * scale else 22f * scale
+                    val distance = direction * (reach + (if (inside) -.5f else .5f) * scale)
                     host.performTouchInput {
                         click(center + if (horizontal) Offset(distance, 0f) else Offset(0f, distance))
                     }

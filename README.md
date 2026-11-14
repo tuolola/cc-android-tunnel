@@ -32,9 +32,11 @@
   <img src="https://img.shields.io/badge/协议-25-c76649?style=flat-square" alt="工作台协议 25" />
 </p>
 
-> 以现有 Android 界面和工作台协议为基准，独立构建原生客户端。
+> 使用 Kotlin 与 Jetpack Compose，在 Android 上连接和操作你的工作台。
 
 </div>
+
+先感谢一下原作者 [sun168567](https://github.com/sun168567) 和 [cc-desk-tunnel](https://github.com/sun168567/cc-desk-tunnel) 的贡献者们，把这么实用的项目做出来，还愿意开源分享。有了上游的基础，才有了这个安卓版；这里做的事情，就是让大家离开电脑后，也能拿起手机接着用。原项目的功劳不能少，觉得好用的话，也欢迎去上游点个 Star，支持一下原作者！
 
 ## 项目简介
 
@@ -69,30 +71,30 @@ flowchart LR
 
 本仓库是独立 Android 工程。界面、网络、Markdown 和代码展示均采用原生实现，不依赖 React Native、Expo、Hermes、Metro、JavaScript 业务运行时，也不使用 WebView 承载界面。构建和运行客户端均不需要 Node.js。
 
-迁移遵循现有 Android App 的布局与交互，但**不宣称已经完全像素一致，也不宣称所有功能均已完成验收**。已验证范围和待办见[验证与验收](#验证与验收)。
+已验证范围、测试运行方式与待验证场景见[验证与验收](#验证与验收)。
 
-使用前需要可访问的**协议 25 工作台服务**及认证信息。本仓库提供 Android 客户端，不包含工作台服务端或模型服务。当前 App 保留 Android 基线中的中文界面文案。
+使用前需要可访问的**协议 25 工作台服务**及认证信息。本仓库提供 Android 客户端，不包含工作台服务端或模型服务。当前 App 使用中文界面。
 
 ## 应用实拍
 
-以下截图来自 **2026-11-14 的原生调试版本**，在 Android 14 模拟器上直接截取（1440 × 2560、640 dpi、字体缩放 1.0），保留原始 PNG。截图拍摄于项目更名前，展示专用英文验收会话；模型列表由测试服务提供，多行输入使用测试键盘。构建指纹和图片校验值见[截图记录](./docs/screenshots/capture-info.json)。
+以下为当前原生 App 在 Android 模拟器上的实拍，展示浅色与深色首页、权限选择和会话设置，不含会话消息或连接凭据。静态截图用于说明界面布局；动画、真实服务流程和不同设备的验证范围见下方[验证与验收](#验证与验收)。
 
 <table>
   <tr>
-    <th>浅色聊天与代码展示</th>
-    <th>深色聊天</th>
+    <th>浅色首页</th>
+    <th>深色首页</th>
   </tr>
   <tr>
-    <td><a href="./docs/screenshots/chat-light.png"><img src="./docs/screenshots/chat-light.png" width="300" alt="原生 Android App 浅色主题聊天与 Kotlin 代码块实拍" /></a></td>
-    <td><a href="./docs/screenshots/chat-dark.png"><img src="./docs/screenshots/chat-dark.png" width="300" alt="原生 Android App 深色主题聊天实拍" /></a></td>
+    <td><a href="./docs/screenshots/home-light.png"><img src="./docs/screenshots/home-light.png" width="300" alt="CCtunnel 原生 Android App 浅色首页" /></a></td>
+    <td><a href="./docs/screenshots/home-dark.png"><img src="./docs/screenshots/home-dark.png" width="300" alt="CCtunnel 原生 Android App 深色首页" /></a></td>
   </tr>
   <tr>
-    <th>模型选择</th>
-    <th>多行输入与键盘</th>
+    <th>权限选择</th>
+    <th>会话设置</th>
   </tr>
   <tr>
-    <td><a href="./docs/screenshots/model-picker.png"><img src="./docs/screenshots/model-picker.png" width="300" alt="原生 Android App 模型选择面板实拍" /></a></td>
-    <td><a href="./docs/screenshots/multiline-input.png"><img src="./docs/screenshots/multiline-input.png" width="300" alt="原生 Android App 多行输入框与展开键盘实拍" /></a></td>
+    <td><a href="./docs/screenshots/permission-picker.png"><img src="./docs/screenshots/permission-picker.png" width="300" alt="CCtunnel 权限选择面板" /></a></td>
+    <td><a href="./docs/screenshots/session-settings.png"><img src="./docs/screenshots/session-settings.png" width="300" alt="CCtunnel 会话设置面板" /></a></td>
   </tr>
 </table>
 
@@ -103,11 +105,12 @@ flowchart LR
 | 范围 | 原生实现 |
 | --- | --- |
 | 连接与认证 | HTTPS 工作台登录、直接 WSS 服务令牌连接、连接状态、退出与重新连接 |
-| 会话与项目 | 会话列表、新建、切换、重命名、删除、置顶；项目显示、内容查找及更早历史加载 |
+| 会话与项目 | 会话列表、新建、切换、重命名、删除、置顶；列表中显示项目，支持内容查找及更早历史加载 |
 | 对话 | 发送消息、接收流式回复、停止生成、继续执行及请求上下文压缩 |
 | 内容展示 | 原生 Markdown、代码语法高亮、表格、链接、图片、文字选择与复制 |
 | 工具与交互 | 思考内容、工具调用与结果、权限回复、问题回答、后台任务控制 |
 | 模型设置 | 服务端模型列表、自定义模型标识、思考强度及会话配置 |
+| 输入区与会话设置 | 输入框左侧选择权限模式，右侧选择模型并发送；右上角齿轮提供内容查找、状态刷新、上下文与后台任务操作 |
 | 设置页面 | 连接与访问管理、TOTP 控制、账号与用量、应用内通知和帮助 |
 | Android 体验 | 浅色与深色主题、原生多行输入框、键盘避让、滚动、手势、禁用与只读状态 |
 | 恢复与本地状态 | 临时断线时保留已加载历史，按持久事件游标恢复；保存服务范围内的偏好，通过 Android Keystore 保护凭据 |
@@ -364,22 +367,24 @@ python -B -m unittest discover -s scripts -p "test_*.py"
 python -B scripts/audit-native-apk.py app/build/outputs/apk/debug/app-debug.apk --project . --dependencies app/build/reports/native-boundary/native-dependencies.txt
 ```
 
-设备测试需要连接模拟器或设备。Python 仅用于可选的独立 APK 审计及其回归测试，App 和 Gradle 构建不依赖 Python。
+设备测试需要连接模拟器或设备，独立 APK 审计需要先完成上方的 APK 构建。Python 仅用于可选的独立 APK 审计及其回归测试，App 和 Gradle 构建不依赖 Python。
+
+启动与动画流畅度可按[性能与流畅度测试](./docs/performance-testing.md)使用 `scripts/measure-performance.ps1` 采样。该工具记录启动耗时或指定操作窗口内的 Android 帧统计，输出保存到已忽略的 `artifacts/performance/`；诊断采样不等同于发布版本性能验收。
 
 [原生构建检查](./gradle/native-boundary.gradle.kts) 会检查生产源码及已解析的运行时依赖；APK 构建还会检查 DEX 引用、打包资源和原生库，拒绝受限的 JavaScript 引擎及 WebView 渲染。[Python 审计](./scripts/audit-native-apk.py) 提供独立复核。检查允许 AndroidX 的静态 `WebView.findAddress` 兼容引用，仍会拒绝创建或渲染 WebView。
 
-### 已记录的迁移验证 — 2026-11-14
+### 当前验证结果 — 2026-11-14
 
-| 证据 | 已验证范围 |
+| 检查 | 本轮结果 |
 | --- | --- |
-| 构建与静态检查 | Debug 和未签名 Release 构建完成；36 项 JVM 测试、8 项审计回归测试通过。Lint 无错误，仍有 29 条警告。 |
-| 设备测试套件 | 39 项通过、4 项显式 opt-in 测试跳过、0 项失败。跳过不计入验收通过。 |
-| 真实服务 | 已操作会话生命周期、模型与思考强度设置、流式回复、停止/继续、一次更早历史请求、重连、上下文压缩与退出。 |
-| 真实工具执行 | 受限测试工具实际执行并完成；服务端**没有触发权限审批**。 |
-| 真实网络中断 | 独立 Wi-Fi 断网恢复测试通过，51 条持久历史事件保留且没有重复；该结果与普通套件的 opt-in 跳过分开记录。 |
-| 视觉对照 | 在同一 Android 14 模拟器、1440 × 2560、640 dpi、字体缩放 1.0 下，对比了 14 组新旧截图，并声明比较区域。文字/图标边缘和文字选择行为仍有差异。 |
+| 构建 | Debug APK 与 Android 设备测试 APK 构建成功 |
+| JVM 测试 | 43 项通过，0 项失败 |
+| 独立审计回归测试 | 8 项通过 |
+| Android Lint | 0 个错误，37 条警告 |
+| 原生约束 | APK 原生边界检查与独立 APK 审计通过 |
+| 完整 Android 设备套件 | 共 61 项：58 项通过、3 项真实服务 opt-in 测试跳过、0 项失败 |
 
-以上记录来自项目更名之前的迁移验收，不代表更名后的构建已重新通过验收。这些是指定日期的迁移验证记录，不是 CI 状态，也不代表所有服务和设备都会得到相同结果。私有服务记录及含敏感信息的截图不公开；上方仅展示已检查的应用实拍。
+设备套件包含 13 项会话设置测试，涵盖权限模式保存与取消、草稿会话创建、只读和运行中状态、窄屏输入区，以及重复停止请求的处理。本轮未重新运行完整真实服务流程；3 项 opt-in 跳过不计作真实连接、工具执行或断网恢复验收通过。以上为本轮构建和指定模拟器上的结果，不代表所有设备均已验证。
 
 ### 测试源码与验收边界
 
@@ -388,7 +393,8 @@ python -B scripts/audit-native-apk.py app/build/outputs/apk/debug/app-debug.apk 
 | [协议](./app/src/test/java/dev/ccdesk/nativeapp/core/ProtocolTest.kt) · [安全](./app/src/test/java/dev/ccdesk/nativeapp/core/SecurityTest.kt) | 流式片段合并、历史游标、继续执行、重连隔离、认证和 TLS 规则 |
 | [原生 TLS 集成](./app/src/androidTest/java/dev/ccdesk/nativeapp/core/NativeTlsIntegrationTest.kt) · [凭据存储](./app/src/androidTest/java/dev/ccdesk/nativeapp/core/CredentialVaultTest.kt) · [静默连接恢复](./app/src/androidTest/java/dev/ccdesk/nativeapp/core/SilentPeerRecoveryTest.kt) | Android 上的本地 TLS fixture、加密凭据和无 Pong 响应时的连接恢复 |
 | [UI 设备测试](./app/src/androidTest/java/dev/ccdesk/nativeapp/ui) | 原生输入框、Markdown、审批/问题 fixture、模型、设置、手势与全部七份离线许可全文 |
-| [真实聊天](./app/src/androidTest/java/dev/ccdesk/nativeapp/core/LiveWorkbenchAcceptanceTest.kt) · [真实工具](./app/src/androidTest/java/dev/ccdesk/nativeapp/core/RealToolAcceptanceTest.kt) · [真实网络](./app/src/androidTest/java/dev/ccdesk/nativeapp/core/RealNetworkRecoveryTest.kt) · [录制动画](./app/src/androidTest/java/dev/ccdesk/nativeapp/core/RecordedMotionTest.kt) | 4 项显式 opt-in 测试，分别需要真实服务、网络中断条件或指定录像 |
+| [会话设置](./app/src/androidTest/java/dev/ccdesk/nativeapp/ui/SessionSettingsTest.kt) | 权限模式、保存与取消、会话操作、状态限制和窄屏输入区 |
+| [真实聊天](./app/src/androidTest/java/dev/ccdesk/nativeapp/core/LiveWorkbenchAcceptanceTest.kt) · [真实工具](./app/src/androidTest/java/dev/ccdesk/nativeapp/core/RealToolAcceptanceTest.kt) · [真实网络](./app/src/androidTest/java/dev/ccdesk/nativeapp/core/RealNetworkRecoveryTest.kt) | 显式 opt-in 测试，需要真实服务或网络中断条件；默认跳过不计作验收通过 |
 
 启用 opt-in 测试前请阅读对应参数检查。真实服务测试要求显式匹配目标主机且已登录；网络测试会临时关闭 Wi-Fi，并要求指定测试会话。应在测试设备和服务上运行。
 
@@ -396,9 +402,9 @@ python -B scripts/audit-native-apk.py app/build/outputs/apk/debug/app-debug.apk 
 
 - 真实权限审批和问题回答往返链路；当前审批/问题覆盖来自原生 UI fixture。
 - 真实后台任务、完整 TOTP/访问撤销流程，以及覆盖多个完整窗口的历史分页。
-- 可靠的新旧动画逐帧对照；受控时钟下的手势测试不能替代录制帧验收。
+- 实际设备上的动画流畅度、快速连续操作及中断后的视觉表现；受控时钟下的手势测试不能替代这些检查。
 - 实体设备触觉反馈、TalkBack、更多 Android API 级别及大字体缩放。
-- 剩余文字、图标与选择手柄差异；局部截图区域不能证明整个应用像素一致。
+- 不同系统字体、文字选择手柄和屏幕尺寸下的完整视觉检查。
 
 ## 安全与本地数据
 
@@ -406,7 +412,7 @@ python -B scripts/audit-native-apk.py app/build/outputs/apk/debug/app-debug.apk 
 
 保存的令牌和浏览器会话 Cookie 使用 Android Keystore 加密。退出和更改信任配置会清除相应凭据，应用备份已禁用。服务范围内的本地偏好与凭据分开存储；断线时保留的历史不是全部服务端会话的离线存档。
 
-更名保留 Android 安装标识 `dev.ccdesk.nativeapp`、源码包及加密存储键，以兼容已有安装和凭据。新深链使用 `cc-android-tunnel://`，同时兼容已有的 `ccdesk://` 链接。
+Android 安装标识为 `dev.ccdesk.nativeapp`，连接深链使用 `cc-android-tunnel://`。
 
 ## 项目结构
 
@@ -418,11 +424,11 @@ python -B scripts/audit-native-apk.py app/build/outputs/apk/debug/app-debug.apk 
 | `app/src/test` | JVM 协议、安全、消息投影和代码高亮测试 |
 | `app/src/androidTest` | Android 集成、UI 及 opt-in 真实服务验收测试 |
 | `gradle/native-boundary.gradle.kts` | 源码、依赖和 APK 的原生约束检查 |
-| `scripts` | Windows 构建脚本与独立 APK 审计 |
+| `scripts` | Windows 构建、独立 APK 审计及性能诊断脚本 |
 
 ## 来源与许可
 
-本项目基于 **[sun168567/cc-desk-tunnel](https://github.com/sun168567/cc-desk-tunnel)**，由 **[tuolola/cc-android-tunnel](https://github.com/tuolola/cc-android-tunnel)** 独立维护，是非官方 Android 原生移植。迁移以现有 Android 客户端作为视觉和行为基准，保留上游贡献与来源声明，并独立维护原生实现。
+本项目基于 **[sun168567/cc-desk-tunnel](https://github.com/sun168567/cc-desk-tunnel)**，由 **[tuolola/cc-android-tunnel](https://github.com/tuolola/cc-android-tunnel)** 独立维护，是非官方 Android 原生移植。项目保留上游贡献与来源声明，并独立维护原生实现。
 
 项目代码和文档使用 **[Apache License 2.0](./LICENSE)**。来源与归属说明见 **[NOTICE](./NOTICE)**。第三方依赖、图标及改编代码保留各自许可，包括[随应用打包的第三方许可汇总](./app/src/main/res/raw/third_party_notices.txt)和 [app/src/main/res/raw](./app/src/main/res/raw) 中的单独声明；重新分发源码或应用时请一并保留。
 

@@ -17,7 +17,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewModelScope
 import dev.ccdesk.nativeapp.core.WorkbenchRepository
 import dev.ccdesk.nativeapp.ui.WorkbenchApp
@@ -41,7 +40,7 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); routeIntent(intent) }
     private fun routeIntent(intent: Intent?) {
         val uri = intent?.data ?: return
-        if (intent.action != Intent.ACTION_VIEW || uri.scheme !in setOf("cc-android-tunnel", "ccdesk")) return
+        if (intent.action != Intent.ACTION_VIEW || uri.scheme != "cc-android-tunnel") return
         val route = (uri.host.orEmpty() + uri.path.orEmpty()).trim('/')
         if (route in setOf("", "settings", "connection", "usage", "access", "notifications", "help", "chats")) model.requestedRoute = route
     }

@@ -32,9 +32,11 @@
   <img src="https://img.shields.io/badge/Protocol-25-c76649?style=flat-square" alt="Workbench protocol 25" />
 </p>
 
-> A standalone native migration guided by the existing Android interface and workbench protocol.
+> Connect to and operate your workbench on Android with Kotlin and Jetpack Compose.
 
 </div>
+
+First, a big thank-you to [sun168567](https://github.com/sun168567) and everyone contributing to [cc-desk-tunnel](https://github.com/sun168567/cc-desk-tunnel) for building something so useful and sharing it as open source. This Android version builds on their work, with a simple aim: let you pick up your phone and keep going when you're away from your computer. If you find it useful, consider giving the upstream project a star and showing its creators some support!
 
 ## Overview
 
@@ -66,30 +68,30 @@ Upstream supplies the server and desktop execution channel; this repository supp
 
 This repository contains a standalone Android project. Its UI, networking, Markdown and code rendering run natively, without React Native, Expo, Hermes, Metro, a JavaScript business runtime or a WebView-hosted interface. Building and running the client does not require Node.js.
 
-The migration follows the existing Android app's layout and behavior. It does **not** claim complete pixel identity or completed acceptance of every feature. See [verification and remaining work](#verification).
+See [verification](#verification) for the checked scope, test commands and scenarios awaiting validation.
 
-You need an accessible **protocol 25 workbench service** and its authentication details. This repository supplies the Android client, not the workbench server or model service. The app currently retains the Chinese interface labels from the Android baseline.
+You need an accessible **protocol 25 workbench service** and its authentication details. This repository supplies the Android client, not the workbench server or model service. The app currently uses a Chinese interface.
 
 ## App Screenshots
 
-These are original PNG captures of the **native debug build on November 14, 2026**, running on an Android 14 emulator at 1440 × 2560, 640 dpi and font scale 1.0. Captured before the project rename, they show a dedicated English acceptance conversation; the model catalog comes from the test service, and multiline input uses the test keyboard. The build fingerprint and image checksums are in the [capture record](./docs/screenshots/capture-info.json).
+These captures show the current native app on an Android emulator: the light and dark home screens, permission picker and session settings. They contain no conversation messages or connection credentials. Static screenshots illustrate the layout; see [verification](#verification) for the scope of animation, real-service and device checks.
 
 <table>
   <tr>
-    <th>Light chat and code rendering</th>
-    <th>Dark chat</th>
+    <th>Light home screen</th>
+    <th>Dark home screen</th>
   </tr>
   <tr>
-    <td><a href="./docs/screenshots/chat-light.png"><img src="./docs/screenshots/chat-light.png" width="300" alt="Actual native Android app showing light-theme chat and a Kotlin code block" /></a></td>
-    <td><a href="./docs/screenshots/chat-dark.png"><img src="./docs/screenshots/chat-dark.png" width="300" alt="Actual native Android app showing dark-theme chat" /></a></td>
+    <td><a href="./docs/screenshots/home-light.png"><img src="./docs/screenshots/home-light.png" width="300" alt="CCtunnel native Android app in the light theme" /></a></td>
+    <td><a href="./docs/screenshots/home-dark.png"><img src="./docs/screenshots/home-dark.png" width="300" alt="CCtunnel native Android app in the dark theme" /></a></td>
   </tr>
   <tr>
-    <th>Model picker</th>
-    <th>Multiline input and keyboard</th>
+    <th>Permission picker</th>
+    <th>Session settings</th>
   </tr>
   <tr>
-    <td><a href="./docs/screenshots/model-picker.png"><img src="./docs/screenshots/model-picker.png" width="300" alt="Actual native Android model picker" /></a></td>
-    <td><a href="./docs/screenshots/multiline-input.png"><img src="./docs/screenshots/multiline-input.png" width="300" alt="Actual native Android multiline composer with the keyboard open" /></a></td>
+    <td><a href="./docs/screenshots/permission-picker.png"><img src="./docs/screenshots/permission-picker.png" width="300" alt="CCtunnel permission picker" /></a></td>
+    <td><a href="./docs/screenshots/session-settings.png"><img src="./docs/screenshots/session-settings.png" width="300" alt="CCtunnel session settings" /></a></td>
   </tr>
 </table>
 
@@ -100,11 +102,12 @@ The table describes the native implementation. Server capabilities and permissio
 | Area | Native implementation |
 | --- | --- |
 | Connection and authentication | HTTPS workbench login, direct WSS service-token connection, connection status, logout and reconnection |
-| Sessions and projects | Session list, creation, switching, renaming, deletion and pinning; project display, content search and earlier-history loading |
+| Sessions and projects | Session list, creation, switching, renaming, deletion and pinning; projects shown in the session list, content search and earlier-history loading |
 | Conversation | Send messages, receive streaming replies, stop generation, continue a run and request context compaction |
 | Content rendering | Native Markdown, syntax-highlighted code, tables, links, images, text selection and copying |
 | Tools and interaction | Thinking content, tool calls and results, permission replies, question answers, background-task controls |
 | Model controls | Server-provided model catalog, custom model identifiers, thinking effort and session configuration |
+| Composer and session settings | Permission mode on the left of the composer, model selection and send on the right; the top-right gear opens search, status refresh, context and background-task controls |
 | Settings | Connection and access management, TOTP controls, account and usage views, in-app notifications and help |
 | Android behavior | Light/dark themes, native multiline editor, keyboard avoidance, scrolling, gestures, disabled and read-only states |
 | Recovery and local state | Retain loaded history during temporary disconnection, recover by durable event cursor, persist service-scoped preferences and protect credentials with Android Keystore |
@@ -302,22 +305,24 @@ python -B -m unittest discover -s scripts -p "test_*.py"
 python -B scripts/audit-native-apk.py app/build/outputs/apk/debug/app-debug.apk --project . --dependencies app/build/reports/native-boundary/native-dependencies.txt
 ```
 
-Device tests require a connected emulator or device. Python is only needed for the optional independent APK audit and its regression tests, not for the app or Gradle build.
+Device tests require a connected emulator or device. Build the APK as described above before running the independent audit. Python is only needed for the optional independent APK audit and its regression tests, not for the app or Gradle build.
+
+Use `scripts/measure-performance.ps1` with the [performance testing guide (Chinese)](./docs/performance-testing.md) to sample startup time or Android frame statistics during a specified interaction window. Reports go to the ignored `artifacts/performance/` directory. Diagnostic samples do not establish release-build performance acceptance.
 
 [The native build guard](./gradle/native-boundary.gradle.kts) checks production sources and resolved runtime dependencies. APK assembly also checks DEX references, packaged assets and native libraries for excluded JavaScript engines and WebView rendering. [The Python audit](./scripts/audit-native-apk.py) provides a separate check. The guard permits AndroidX's static `WebView.findAddress` compatibility reference; constructing or rendering a WebView remains rejected.
 
-### Recorded migration verification — 2026-11-14
+### Current verification results — 2026-11-14
 
-| Evidence | Recorded scope |
+| Check | Result for this run |
 | --- | --- |
-| Build and static checks | Debug and unsigned release builds completed; 36 JVM tests and 8 audit regression tests passed. Lint reported no errors and 29 warnings. |
-| Device suite | 39 passed, 4 explicit opt-in tests skipped, 0 failed. Skips are not counted as acceptance passes. |
-| Real service | Session lifecycle, model/effort configuration, streaming, stop/continue, an earlier-history request, reconnect, compaction and logout exercised against a real service. |
-| Real tool execution | The restricted test tool executed and completed; the service did **not** trigger permission approval. |
-| Real network interruption | A separate Wi-Fi loss/recovery run passed; 51 durable history events were retained without duplicate sequences. This is separate from the ordinary suite's opt-in skip. |
-| Visual comparison | 14 old/new screenshot pairs compared on the same Android 14 emulator at 1440 × 2560, 640 dpi and font scale 1.0, with declared comparison regions. Text/icon edges and selection behavior still differ. |
+| Build | Debug APK and Android instrumentation APK built successfully |
+| JVM tests | 43 passed, 0 failed |
+| Independent audit regression tests | 8 passed |
+| Android Lint | 0 errors, 37 warnings |
+| Native enforcement | APK native-boundary check and independent APK audit passed |
+| Full Android device suite | 61 total: 58 passed, 3 real-service opt-in tests skipped, 0 failed |
 
-These records predate the project rename; they are not a new verification of a renamed build. They are dated migration observations, not a CI status or a promise of identical results on every service and device. Private service records and screenshots containing sensitive information are not published; only the inspected app captures above are included.
+The device suite includes 13 session-settings tests covering saved and cancelled permission changes, draft-session creation, read-only and running states, the narrow-screen composer and repeated stop requests. Full real-service flows were not rerun in this round; the three opt-in skips do not establish acceptance of real connections, tool execution or network-loss recovery. These results apply to this build and the tested emulator, not every device.
 
 ### Test sources and acceptance boundaries
 
@@ -326,7 +331,8 @@ These records predate the project rename; they are not a new verification of a r
 | [Protocol](./app/src/test/java/dev/ccdesk/nativeapp/core/ProtocolTest.kt) · [Security](./app/src/test/java/dev/ccdesk/nativeapp/core/SecurityTest.kt) | Fragment merging, history cursors, continuation, reconnect isolation, authentication and TLS rules |
 | [Native TLS integration](./app/src/androidTest/java/dev/ccdesk/nativeapp/core/NativeTlsIntegrationTest.kt) · [Credential vault](./app/src/androidTest/java/dev/ccdesk/nativeapp/core/CredentialVaultTest.kt) · [Silent peer recovery](./app/src/androidTest/java/dev/ccdesk/nativeapp/core/SilentPeerRecoveryTest.kt) | Local TLS fixtures, encrypted credentials and missing-Pong recovery on Android |
 | [UI instrumentation](./app/src/androidTest/java/dev/ccdesk/nativeapp/ui) | Native composer, Markdown, approval/question fixtures, models, settings, gestures and all seven offline license documents |
-| [Real chat](./app/src/androidTest/java/dev/ccdesk/nativeapp/core/LiveWorkbenchAcceptanceTest.kt) · [Real tool](./app/src/androidTest/java/dev/ccdesk/nativeapp/core/RealToolAcceptanceTest.kt) · [Real network](./app/src/androidTest/java/dev/ccdesk/nativeapp/core/RealNetworkRecoveryTest.kt) · [Recorded motion](./app/src/androidTest/java/dev/ccdesk/nativeapp/core/RecordedMotionTest.kt) | Four explicit opt-in tests requiring service access, network interruption or a supplied recording |
+| [Session settings](./app/src/androidTest/java/dev/ccdesk/nativeapp/ui/SessionSettingsTest.kt) | Permission modes, saving and cancelling, session actions, state restrictions and the narrow-screen composer |
+| [Real chat](./app/src/androidTest/java/dev/ccdesk/nativeapp/core/LiveWorkbenchAcceptanceTest.kt) · [Real tool](./app/src/androidTest/java/dev/ccdesk/nativeapp/core/RealToolAcceptanceTest.kt) · [Real network](./app/src/androidTest/java/dev/ccdesk/nativeapp/core/RealNetworkRecoveryTest.kt) | Explicit opt-in tests requiring service access or network interruption; default skips are not acceptance passes |
 
 Read the argument checks before enabling opt-in tests. Real-service tests require an explicitly matched host and an existing login; the network test temporarily disables Wi-Fi and requires a designated test session. Use a test device and service.
 
@@ -334,9 +340,9 @@ Read the argument checks before enabling opt-in tests. Real-service tests requir
 
 - A real permission-approval/question round trip; current approval/question coverage uses native UI fixtures.
 - Real background tasks, complete TOTP/access-revocation flows and exhaustive multi-window history pagination.
-- Reliable old/new animation frame comparison; controlled-clock gesture tests do not replace recorded-frame verification.
+- Animation smoothness, rapid repeated actions and interrupted transitions on real devices; controlled-clock gesture tests do not replace these checks.
 - Physical-device haptics, TalkBack, additional Android API levels and large font scales.
-- Remaining text, icon and selection-handle differences. Selected screenshot regions do not establish full-app pixel identity.
+- Complete visual checks across system fonts, text-selection handles and screen sizes.
 
 ## Security and Local Data
 
@@ -344,7 +350,7 @@ HTTPS/WSS are required. System CA mode retains platform trust and hostname check
 
 Saved tokens and browser-session cookies are encrypted using Android Keystore. Logout and trust changes clear the applicable credentials. App backup is disabled. Service-scoped local preferences are separate from credentials; retained history during a disconnect is not an offline archive of all server conversations.
 
-The rename retains the Android installation ID `dev.ccdesk.nativeapp`, source package and encrypted-storage keys for compatibility with existing installations and credentials. New deep links use `cc-android-tunnel://`; existing `ccdesk://` links remain supported.
+The Android installation ID is `dev.ccdesk.nativeapp`. Connection deep links use `cc-android-tunnel://`.
 
 ## Project Structure
 
@@ -356,11 +362,11 @@ The rename retains the Android installation ID `dev.ccdesk.nativeapp`, source pa
 | `app/src/test` | JVM protocol, security, transcript and code-highlighting tests |
 | `app/src/androidTest` | Android integration, UI and opt-in real-service acceptance tests |
 | `gradle/native-boundary.gradle.kts` | Source, dependency and packaged-APK enforcement |
-| `scripts` | Windows build helper and independent APK audit |
+| `scripts` | Windows build helper, independent APK audit and performance diagnostics |
 
 ## Origin and License
 
-This project is based on **[sun168567/cc-desk-tunnel](https://github.com/sun168567/cc-desk-tunnel)** and is independently maintained at **[tuolola/cc-android-tunnel](https://github.com/tuolola/cc-android-tunnel)** as an unofficial native Android port. The existing Android client was the migration's visual and behavior reference. Upstream work and attribution are retained; this repository has its own native implementation and maintenance lifecycle.
+This project is based on **[sun168567/cc-desk-tunnel](https://github.com/sun168567/cc-desk-tunnel)** and is independently maintained at **[tuolola/cc-android-tunnel](https://github.com/tuolola/cc-android-tunnel)** as an unofficial native Android port. Upstream work and attribution are retained; this repository has its own native implementation and maintenance lifecycle.
 
 Project code and documentation are distributed under the **[Apache License 2.0](./LICENSE)**. See **[NOTICE](./NOTICE)** for provenance and attribution. Third-party dependencies, icons and adapted code retain their respective licenses, including the [bundled third-party notices](./app/src/main/res/raw/third_party_notices.txt) and individual notices in [app/src/main/res/raw](./app/src/main/res/raw). Preserve those notices when redistributing the source or app.
 

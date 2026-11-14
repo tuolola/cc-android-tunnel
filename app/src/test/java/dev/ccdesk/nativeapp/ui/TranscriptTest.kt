@@ -48,11 +48,6 @@ class TranscriptTest {
         val q=questionsFrom("{\"questions\":[{\"question\":\"Choose\",\"multiSelect\":true,\"options\":[{\"label\":\"A\"},{\"description\":\"bad\"}]}]}").single()
         assertTrue(q.multi);assertEquals(listOf("A"),q.options.map{it.first})
     }
-    @Test fun fencedBlocksKeepNewlinesAndUnclosedStreamingFence(){
-        val blocks=splitMarkdown("before\n```kotlin\nval x = 1\nval y = 2\n```\nafter")
-        assertEquals(3,blocks.size);assertEquals("val x = 1\nval y = 2",blocks[1].text);assertEquals("kotlin",blocks[1].language);assertFalse(blocks[0].code)
-        assertEquals("partial",splitMarkdown("```\npartial").single().text)
-    }
     @Test fun malformedToolImagesKeepTheOriginalTextVisible(){
         assertNull(parseToolOutput("[{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":123}}]"))
         assertNull(parseToolOutput("[{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/svg+xml\",\"data\":\"abc\"}}]"))

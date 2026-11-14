@@ -23,7 +23,16 @@ import android.widget.ScrollView
 import android.view.ViewGroup
 import androidx.compose.ui.platform.ComposeView
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.ui.platform.testTag
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
@@ -39,7 +48,6 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -89,8 +97,6 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.viewinterop.AndroidView
 import dev.ccdesk.nativeapp.R
 import dev.ccdesk.nativeapp.core.WorkbenchRepository
@@ -152,18 +158,18 @@ private class ScreenAction(private val scope: CoroutineScope) {
 
 /** Source parity: src/workbench/settings/ui.tsx. The panel uses foundation widgets, not Material defaults. */
 @Composable
-fun SecondaryScreen(route: String, repository: WorkbenchRepository, onNavigate: (String) -> Unit, onClose: () -> Unit, onOpenChat: () -> Unit = onClose) {
+fun SecondaryScreen(route: String, repository: WorkbenchRepository, onNavigate: (String) -> Unit, onClose: () -> Unit, onOpenChat: () -> Unit = onClose, visible: Boolean = true) {
     val state by repository.state.collectAsState()
-    val licenseDocument = licenseDocuments.firstOrNull { route == "licenses/${it.id}" }
-    val licenses = route == "licenses" || licenseDocument != null
-    val title = licenseDocument?.title ?: when (route) { "settings" -> "设置"; "connection" -> "连接工作台"; "usage" -> "账号与用量"; "access" -> "访问管理"; "notifications" -> "通知"; "licenses" -> "开源许可与致谢"; else -> "帮助" }
-    SettingsPanel(route, title, onNavigate, onClose,
+    val document = licenseDocumentFor(route)
+    val licenses = route == "licenses" || document != null
+    SettingsPanel(route, titleFor(route), onNavigate, onClose, visible,
         selectedTab = if (licenses) "help" else route,
-        onBack = if (licenses) ({ onNavigate(if (licenseDocument == null) "help" else "licenses") }) else null,
-        backLabel = if (licenseDocument == null) "返回帮助" else "返回开源许可与致谢") {
-        key(route, if (route == "access") state.endpoint + state.webSessionId else "") {
-            if (licenseDocument != null) LicenseDocumentContent(licenseDocument)
-            else when (route) {
+        onBack = if (licenses) ({ onNavigate(if (document == null) "help" else "licenses") }) else null,
+        backLabel = if (document == null) "返回帮助" else "返回开源许可与致谢") { page ->
+        key(page, if (page == "access") state.endpoint + state.webSessionId else "") {
+            val pageDocument = licenseDocumentFor(page)
+            if (pageDocument != null) LicenseDocumentContent(pageDocument)
+            else when (page) {
                 "settings" -> SettingsContent(state, repository, onNavigate)
                 "connection" -> ConnectionContent(state, repository, onNavigate, onOpenChat)
                 "usage" -> UsageContent(state, repository, onNavigate)
@@ -176,52 +182,72 @@ fun SecondaryScreen(route: String, repository: WorkbenchRepository, onNavigate: 
     }
 }
 
+private fun licenseDocumentFor(route: String) = licenseDocuments.firstOrNull { route == "licenses/${it.id}" }
+private fun titleFor(route: String) = licenseDocumentFor(route)?.title ?: when (route) { "settings" -> "设置"; "connection" -> "连接工作台"; "usage" -> "账号与用量"; "access" -> "访问管理"; "notifications" -> "通知"; "licenses" -> "开源许可与致谢"; else -> "帮助" }
+private fun tabIndex(route: String) = when {
+    route == "licenses" -> settingTabs.size
+    licenseDocumentFor(route) != null -> settingTabs.size + 1
+    else -> settingTabs.indexOfFirst { it.first == route }
+}
+
+/**
+ * Settings overlay. The scrim is a window-fixed layer that only fades; the panel above it
+ * lifts, scales and fades on its own spring. While closing, the scrim stops intercepting
+ * input and the panel ignores touches, so nothing lingers after dismissal.
+ */
 @Composable
-internal fun SettingsPanel(route: String, title: String, onNavigate: (String) -> Unit, onClose: () -> Unit,
-    selectedTab: String = route, onBack: (() -> Unit)? = null, backLabel: String = "返回", content: @Composable ColumnScope.() -> Unit) {
+internal fun SettingsPanel(route: String, title: String, onNavigate: (String) -> Unit, onClose: () -> Unit, visible: Boolean = true,
+    selectedTab: String = route, onBack: (() -> Unit)? = null, backLabel: String = "返回", content: @Composable ColumnScope.(String) -> Unit) {
     val c = LocalDeskColors.current
-    var entered by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { entered = true }
-    val progress by animateFloatAsState(if (entered) 1f else 0f, tween(160, easing = secondaryTiming), label = "settings entrance")
-    val slide = with(LocalDensity.current) { 25.dp.toPx() }
-    BackHandler(onBack = onBack ?: onClose)
-    Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = .5f))) {
-        Box(Modifier.matchParentSize().clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClose))
+    val motion = rememberModalMotion(visible)
+    if (!visible && !motion.present) return
+    val haptics = rememberHaptics()
+    val close by rememberUpdatedState(onClose)
+    val lift = with(LocalDensity.current) { DeskMotion.PanelLift.toPx() }
+    BackHandler(enabled = visible, onBack = onBack ?: onClose)
+    Box(Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxSize().testTag(OverlayScrimTag).graphicsLayer { alpha = motion.scrim.value }.background(Color.Black.copy(alpha = DeskMotion.PanelScrim))
+            .then(if (visible) Modifier.pointerInput(Unit) { detectTapGestures { close() } }.semantics { contentDescription = "关闭设置"; role = Role.Button; onClick { close(); true } } else Modifier))
         BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding().imePadding().padding(16.dp), contentAlignment = Alignment.Center) {
             val panelModifier = if (maxWidth >= 736.dp) Modifier.heightIn(max = 780.dp) else Modifier
-            Column(panelModifier.fillMaxHeight().widthIn(max = 672.dp).fillMaxWidth().graphicsLayer { alpha = progress; translationY = slide * (1f - progress) }.clip(RoundedCornerShape(12.dp)).border(1.dp, c.border, RoundedCornerShape(12.dp)).background(c.card).pointerInput(Unit) { detectTapGestures { } }.padding(1.dp)) {
+            Column(panelModifier.fillMaxHeight().widthIn(max = 672.dp).fillMaxWidth()
+                .graphicsLayer { val f = motion.panel.value; alpha = (1f - f).coerceIn(0f, 1f); val scale = 1f - (1f - DeskMotion.PanelEnterScale) * f.coerceIn(0f, 1f); scaleX = scale; scaleY = scale; translationY = lift * f }.testTag(OverlayPanelTag)
+                .clip(RoundedCornerShape(12.dp)).border(1.dp, c.border, RoundedCornerShape(12.dp)).background(c.card)
+                .then(if (visible) AbsorbPointerInput else BlockPointerInput.clearAndSetSemantics { }).padding(1.dp)) {
                 Row(Modifier.fillMaxWidth().height(54.dp).padding(start = 16.dp, end = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     if (onBack != null) DeskIconButton("arrow-left", backLabel, onClick = onBack)
-                    DeskText(title, Modifier.weight(1f).semantics { heading() }, size = 17, weight = FontWeight.SemiBold)
-                    val interaction = remember { MutableInteractionSource() }
-                    val pressed by interaction.collectIsPressedAsState()
-                    Box(Modifier.size(44.dp).clip(RoundedCornerShape(8.dp)).background(if (pressed) c.muted else Color.Transparent).clickable(interactionSource = interaction, indication = null, onClick = onClose).semantics { contentDescription = "关闭"; role = Role.Button }, contentAlignment = Alignment.Center) {
-                        DeskIcon("x", size = 18.dp, tint = c.mutedForeground, strokeWidth = 1.7f)
-                    }
+                    AnimatedContent(title, Modifier.weight(1f), transitionSpec = { fadeIn(DeskMotion.fadeIn()) togetherWith fadeOut(DeskMotion.fadeOut()) }, label = "settings title") { DeskText(it, Modifier.semantics { heading() }, size = 17, weight = FontWeight.SemiBold) }
+                    DeskIconButton("x", "关闭", iconSize = 18.dp, tint = c.mutedForeground, strokeWidth = 1.7f, cornerRadius = 8.dp, onClick = onClose)
                 }
                 val tabScroll = rememberScrollState()
                 val tabPositions = remember { mutableStateMapOf<String, Int>() }
                 // LayoutCoordinates use physical pixels; RN scrollTo uses dp and includes the 12 dp content inset.
                 val tabRevealInset = with(LocalDensity.current) { (26.dp - 12.dp).roundToPx() }
-                LaunchedEffect(selectedTab, tabPositions[selectedTab]) { tabPositions[selectedTab]?.let { tabScroll.scrollTo((it - tabRevealInset).coerceAtLeast(0)) } }
+                LaunchedEffect(selectedTab, tabPositions[selectedTab]) { tabPositions[selectedTab]?.let { tabScroll.animateScrollTo((it - tabRevealInset).coerceAtLeast(0)) } }
                 Row(Modifier.fillMaxWidth().horizontalScroll(tabScroll).padding(start = 12.dp, end = 12.dp, bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
                     settingTabs.forEach { (key, label) ->
                         val selected = selectedTab == key
                         val interaction = remember(key) { MutableInteractionSource() }
-                        val pressed by interaction.collectIsPressedAsState()
-                        Box(Modifier.onGloballyPositioned { tabPositions[key] = it.positionInParent().x.roundToInt() }.height(32.dp).clip(RoundedCornerShape(8.dp)).background(if (pressed) c.muted else if (selected) c.accent else Color.Transparent).clickable(interactionSource = interaction, indication = null) { if (route != key) onNavigate(key) }.semantics { this.selected = selected; role = Role.Tab }.padding(horizontal = 10.dp), contentAlignment = Alignment.Center) {
-                            DeskText(label, size = 14, color = if (selected) c.foreground else c.mutedForeground, weight = if (selected) FontWeight.Medium else FontWeight.Normal)
+                        val pressed by interaction.pressedState()
+                        val background = animatedHighlight(pressed, selected, c.muted, c.accent)
+                        val text by animateColorAsState(if (selected) c.foreground else c.mutedForeground, DeskMotion.state(), label = "tab text")
+                        Box(Modifier.onGloballyPositioned { tabPositions[key] = it.positionInParent().x.roundToInt() }.height(32.dp).clip(RoundedCornerShape(8.dp)).background(background).clickable(interactionSource = interaction, indication = null) { if (route != key) { haptics.selection(); onNavigate(key) } }.semantics { this.selected = selected; role = Role.Tab }.padding(horizontal = 10.dp), contentAlignment = Alignment.Center) {
+                            DeskText(label, size = 14, color = text, weight = if (selected) FontWeight.Medium else FontWeight.Normal)
                         }
                     }
                 }
                 SDivider()
-                key(route) { NativeScrollContent(Modifier.weight(1f).fillMaxWidth(), content = content) }
+                AnimatedContent(route, Modifier.weight(1f).fillMaxWidth(), transitionSpec = {
+                    val forward = tabIndex(targetState) >= tabIndex(initialState)
+                    (slideInHorizontally(DeskMotion.contentOffset) { if (forward) it / 5 else -it / 5 } + fadeIn(DeskMotion.fadeIn())) togetherWith
+                        (slideOutHorizontally(DeskMotion.contentOffset) { if (forward) -it / 5 else it / 5 } + fadeOut(DeskMotion.fadeOut()))
+                }, label = "settings page") { page -> NativeScrollContent(Modifier.fillMaxSize()) { content(page) } }
             }
         }
     }
 }
 
-/** The baseline ReactScrollView is Android ScrollView with OUTSIDE_OVERLAY scrollbars. */
+/** Native scrolling content with fading OUTSIDE_OVERLAY scrollbars. */
 private class SettingsScrollView(context: android.content.Context) : ScrollView(context) {
     fun revealScrollbar() { awakenScrollBars() }
 }
@@ -312,8 +338,9 @@ private class SettingsLineHeight(private val height: Int) : LineHeightSpan {
     val c = LocalDeskColors.current
     val red = if (c.background == Color(0xFF191919)) Color(0xFFFF6467) else Color(0xFFE7000B)
     val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).background(if (pressed) c.muted else Color.Transparent).then(if (onClick != null) Modifier.clickable(interactionSource = interaction, indication = null, onClick = onClick).semantics { role = Role.Button; if (accessibilityLabel != null) contentDescription = accessibilityLabel } else Modifier).padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+    val pressed by interaction.pressedState()
+    val highlight = animatedHighlight(pressed && onClick != null, false, c.muted)
+    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).background(highlight).then(if (onClick != null) Modifier.clickable(interactionSource = interaction, indication = null, onClick = onClick).semantics { role = Role.Button; if (accessibilityLabel != null) contentDescription = accessibilityLabel } else Modifier).padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
         if (icon != null) DeskIcon(icon, size = 18.dp, tint = if (danger) red else c.mutedForeground, strokeWidth = 1.65f)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             SNativeText(label, size = 15, lineHeight = 21, color = if (danger) red else c.foreground)
@@ -337,11 +364,12 @@ private class SettingsLineHeight(private val height: Int) : LineHeightSpan {
     val c = LocalDeskColors.current
     val disabled = !enabled || busy
     val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    Row(Modifier.fillMaxWidth().heightIn(min = 44.dp).graphicsLayer { alpha = if (disabled) .5f else if (pressed) .75f else 1f; compositingStrategy = CompositingStrategy.ModulateAlpha }.clip(RoundedCornerShape(10.dp)).background(if (secondary) c.background else c.foreground)
+    val pressed by interaction.pressedState()
+    val alpha by androidx.compose.animation.core.animateFloatAsState(if (disabled) .5f else if (pressed) .8f else 1f, if (pressed) tween(DeskMotion.PressHighlightIn) else DeskMotion.state(), label = "action alpha")
+    Row(Modifier.fillMaxWidth().heightIn(min = 44.dp).pressScale(pressed, !disabled).graphicsLayer { this.alpha = alpha; compositingStrategy = CompositingStrategy.ModulateAlpha }.clip(RoundedCornerShape(10.dp)).background(if (secondary) c.background else c.foreground)
         .then(if (secondary) Modifier.border(1.dp, c.border, RoundedCornerShape(10.dp)) else Modifier).clickable(enabled = !disabled, interactionSource = interaction, indication = null, onClick = onClick).semantics { role = Role.Button }.padding(horizontal = 16.dp, vertical = 10.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally), verticalAlignment = Alignment.CenterVertically) {
-        if (busy) SBusy()
+        horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+        AnimatedVisibility(busy, enter = fadeIn(DeskMotion.fadeIn()) + androidx.compose.animation.expandHorizontally(DeskMotion.layoutSize), exit = fadeOut(DeskMotion.fadeOut()) + androidx.compose.animation.shrinkHorizontally(DeskMotion.layoutSize)) { Box(Modifier.padding(end = 8.dp)) { SBusy() } }
         NativeSpanText(label, size = 14, lineHeight = null, weight = 500, color = if (secondary) c.foreground else c.background, selectable = false)
     }
 }
@@ -418,8 +446,8 @@ private class SettingsLineHeight(private val height: Int) : LineHeightSpan {
     LaunchedEffect(state.status) { if (state.status == "online") runCatching { repo.command("account.status") } }
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
     val identityInteraction = remember { MutableInteractionSource() }
-    val identityPressed by identityInteraction.collectIsPressedAsState()
-    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).background(if (identityPressed) c.muted else Color.Transparent).clickable(interactionSource = identityInteraction, indication = null) { onNavigate(if (state.authenticated) "usage" else "connection") }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    val identityPressed by identityInteraction.pressedState()
+    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).background(animatedHighlight(identityPressed, false, c.muted)).clickable(interactionSource = identityInteraction, indication = null) { onNavigate(if (state.authenticated) "usage" else "connection") }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Box(Modifier.size(36.dp).clip(CircleShape).background(c.foreground), contentAlignment = Alignment.Center) { DeskIcon("circle-user", size = 20.dp, tint = c.background, strokeWidth = 1.5f) }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             SNativeText(state.account.text("email").ifBlank { if (state.authenticated) "工作台账号" else "尚未登录工作台" }, size = 14, lineHeight = 20, weight = FontWeight.Medium, maxLines = 1)
@@ -441,12 +469,12 @@ private class SettingsLineHeight(private val height: Int) : LineHeightSpan {
     }
     if (state.authenticated) SSection {
         SRow("退出当前登录", icon = "log-out", danger = true, last = !confirm, onClick = { confirm = true })
-        if (confirm) Column(Modifier.padding(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        DeskExpandable(confirm) { Column(Modifier.padding(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             SHint(if (state.endpoint.startsWith("wss:")) "退出后需要重新输入服务凭据。" else "退出后需要重新输入工作台密码。")
             SHint(action.error, true)
             SAction("退出登录", busy = action.busy) { action.run { repo.logout(); onNavigate("connection") } }
             SAction("取消", secondary = true) { confirm = false }
-        }
+        } }
     }
 }
 
@@ -573,10 +601,13 @@ private fun normalizedPin(raw: String): String {
 
 @Composable private fun SOption(label: String, selected: Boolean, onClick: () -> Unit) {
     val c = LocalDeskColors.current
+    val haptics = rememberHaptics()
     val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    Box(Modifier.alpha(if (pressed) .75f else 1f).clip(CircleShape).background(if (selected) c.foreground else c.muted).clickable(interactionSource = interaction, indication = null, onClick = onClick).semantics { this.selected = selected; role = Role.Button }.padding(horizontal = 14.dp, vertical = 10.dp)) {
-        DeskText(label, size = 14, color = if (selected) c.background else c.foreground, weight = if (selected) FontWeight.Medium else FontWeight.Normal)
+    val pressed by interaction.pressedState()
+    val background by animateColorAsState(if (selected) c.foreground else if (pressed) c.accent else c.muted, DeskMotion.highlight(pressed), label = "option background")
+    val text by animateColorAsState(if (selected) c.background else c.foreground, DeskMotion.state(), label = "option text")
+    Box(Modifier.pressScale(pressed, true, DeskMotion.ChipPressScale).clip(CircleShape).background(background).clickable(interactionSource = interaction, indication = null) { if (!selected) haptics.selection(); onClick() }.semantics { this.selected = selected; role = Role.Button }.padding(horizontal = 14.dp, vertical = 10.dp)) {
+        DeskText(label, size = 14, color = text, weight = if (selected) FontWeight.Medium else FontWeight.Normal)
     }
 }
 
@@ -692,12 +723,13 @@ private fun normalizedPin(raw: String): String {
         } else state.notices.forEachIndexed { index, n ->
             key(n.id) {
                 val interaction = remember { MutableInteractionSource() }
-                val pressed by interaction.collectIsPressedAsState()
+                val pressed by interaction.pressedState()
                 SecondaryFadeContent(true) {
-                    Row(Modifier.fillMaxWidth().heightIn(min = 54.dp).animateContentSize(tween(180, easing = secondaryTiming)).background(if (pressed) c.muted else Color.Transparent).clickable(enabled = !action.busy, interactionSource = interaction, indication = null) {
+                    Row(Modifier.fillMaxWidth().heightIn(min = 54.dp).animateContentSize(DeskMotion.layoutSize).background(animatedHighlight(pressed, false, c.muted)).clickable(enabled = !action.busy, interactionSource = interaction, indication = null) {
                         action.run { if (n.sessionId.isNotEmpty()) repo.selectSession(n.sessionId); repo.readNotice(n.id); if (n.sessionId.isNotEmpty()) onClose() }
                     }.semantics { contentDescription = "${if (n.read) "已读" else "未读"}，${n.title}，${n.body}"; role = Role.Button }.padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(8.dp).clip(CircleShape).background(if (n.read) c.muted else c.foreground))
+                        val dot by animateColorAsState(if (n.read) c.muted else c.foreground, DeskMotion.state(), label = "unread dot")
+                        Box(Modifier.size(8.dp).clip(CircleShape).background(dot))
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             SNativeText(n.title, size = 14, lineHeight = 20, weight = FontWeight.Medium)
                             if (n.body.isNotEmpty()) SNativeText(n.body, size = 13, lineHeight = 18, color = c.mutedForeground)
@@ -730,13 +762,13 @@ private val helpTopics = listOf(
     SSection("常见问题") {
         helpTopics.forEachIndexed { index, (question, answer) ->
             val interaction = remember(index) { MutableInteractionSource() }
-            val pressed by interaction.collectIsPressedAsState()
-            Column(Modifier.animateContentSize(tween(180, easing = secondaryTiming))) {
-                Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).background(if (pressed) c.muted else Color.Transparent).clickable(interactionSource = interaction, indication = null) { open = if (open == index) null else index }.semantics { stateDescription = if (open == index) "展开" else "收起"; role = Role.Button }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            val pressed by interaction.pressedState()
+            Column {
+                Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).background(animatedHighlight(pressed, false, c.muted)).clickable(interactionSource = interaction, indication = null) { open = if (open == index) null else index }.semantics { stateDescription = if (open == index) "展开" else "收起"; role = Role.Button }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     SNativeText(question, Modifier.weight(1f), size = 15, lineHeight = 21)
-                    DeskIcon(if (open == index) "chevron-up" else "chevron-down", size = 16.dp, tint = c.mutedForeground)
+                    DeskChevron(open == index)
                 }
-                SecondaryFadeContent(open == index) {
+                DeskExpandable(open == index) {
                     SNativeText(answer, Modifier.padding(bottom = 16.dp), size = 14, lineHeight = 23, color = c.mutedForeground, selectable = true)
                 }
                 if (index != helpTopics.lastIndex) SDivider()
@@ -800,13 +832,14 @@ private val licenseDocuments = listOf(
     AnimatedVisibility(visibility, modifier, enter = fadeIn(tween(160, easing = secondaryTiming)), exit = ExitTransition.None) { content() }
 }
 
-/** Full screen session library (src/app/chats.tsx), kept separate from the settings overlay. */
+/** Full screen session library (src/app/chats.tsx), pushed above the chat as a page. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun ChatsScreen(repository: WorkbenchRepository, onNavigate: (String) -> Unit, onClose: () -> Unit, onOpenDrawer: () -> Unit) {
+fun ChatsScreen(repository: WorkbenchRepository, onNavigate: (String) -> Unit, onClose: () -> Unit, onOpenDrawer: () -> Unit, active: Boolean = true) {
     val state by repository.state.collectAsState()
     val c = LocalDeskColors.current
     val action = rememberAction()
+    val haptics = rememberHaptics()
     var query by remember { mutableStateOf("") }
     var pinnedOnly by remember { mutableStateOf(false) }
     var activeId by remember { mutableStateOf<String?>(null) }
@@ -815,6 +848,7 @@ fun ChatsScreen(repository: WorkbenchRepository, onNavigate: (String) -> Unit, o
     val online = state.status == "online"
     val loading = state.status == "loading" || state.status == "connecting"
     val current = state.sessions.find { it.id == activeId }
+    val shownSession = rememberLastNonNull(current)
     val groups = remember(state.sessions, state.pins, state.serverDeviceId, query, pinnedOnly) {
         val search = query.trim().lowercase()
         state.sessions.sortedWith(compareByDescending<dev.ccdesk.nativeapp.core.Session> { it.id in state.pins }.thenByDescending { it.updatedAt }).filter { session ->
@@ -827,54 +861,58 @@ fun ChatsScreen(repository: WorkbenchRepository, onNavigate: (String) -> Unit, o
     }
     val create: () -> Unit = { if (!online) onNavigate("connection") else action.run { repository.createSession(); onClose() } }
     val closeMenu: () -> Unit = { if (!action.busy) { activeId = null; action.error = "" } }
-    BackHandler(onBack = onClose)
-    Box(Modifier.fillMaxSize().background(c.background).safeDrawingPadding(), contentAlignment = Alignment.TopCenter) {
+    BackHandler(enabled = active, onBack = onClose)
+    Box(Modifier.fillMaxSize().then(AbsorbPointerInput).background(c.background).safeDrawingPadding(), contentAlignment = Alignment.TopCenter) {
         Column(Modifier.widthIn(max = 768.dp).fillMaxSize()) {
             Row(Modifier.fillMaxWidth().height(54.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 SIconButton("menu", "打开侧栏", onClick = onOpenDrawer)
                 androidx.compose.material3.Text("会话", Modifier.weight(1f).semantics { heading() }, fontFamily = FontFamily.Serif, fontSize = 23.sp, lineHeight = 32.sp, color = c.foreground)
-                Box(Modifier.clip(RoundedCornerShape(8.dp)).background(if (pinnedOnly) c.accent else Color.Transparent)) {
-                    SIconButton("list-filter", if (pinnedOnly) "显示全部会话" else "仅显示置顶", selected = pinnedOnly) { pinnedOnly = !pinnedOnly }
-                }
+                SIconButton("list-filter", if (pinnedOnly) "显示全部会话" else "仅显示置顶", selected = pinnedOnly) { pinnedOnly = !pinnedOnly; haptics.toggle(pinnedOnly) }
                 SIconButton("plus", "新建会话", enabled = !action.busy, onClick = create)
             }
             Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth().height(40.dp).clip(RoundedCornerShape(8.dp)).background(c.muted).padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                 DeskIcon("search", size = 16.dp, tint = c.mutedForeground)
                 BasicTextField(query, { query = it }, Modifier.weight(1f).semantics { contentDescription = "查找会话" }, textStyle = TextStyle(color = c.foreground, fontSize = 15.sp), cursorBrush = SolidColor(c.foreground), singleLine = true, keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search), decorationBox = { inner -> Box { if (query.isEmpty()) DeskText("查找会话、设备或项目", size = 15, color = c.mutedForeground); inner() } })
-                if (query.isNotEmpty()) Box(Modifier.size(32.dp).clickable { query = "" }.semantics { contentDescription = "清除搜索"; role = Role.Button }, contentAlignment = Alignment.Center) { DeskIcon("x", size = 16.dp, tint = c.mutedForeground) }
+                AnimatedVisibility(query.isNotEmpty(), enter = fadeIn(DeskMotion.fadeIn()) + scaleIn(DeskMotion.icon(), .6f), exit = fadeOut(DeskMotion.fadeOut()) + scaleOut(DeskMotion.icon(), .6f)) {
+                    Box(Modifier.size(32.dp).clip(CircleShape).deskPressable(c.accent, 16.dp) { query = "" }.semantics { contentDescription = "清除搜索"; role = Role.Button }, contentAlignment = Alignment.Center) { DeskIcon("x", size = 16.dp, tint = c.mutedForeground) }
+                }
             }
-            if (action.error.isNotEmpty() && current == null) Box(Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) { SHint(action.error, true) }
-            if (!online && state.sessions.isNotEmpty()) Box(Modifier.fillMaxWidth().clickable { onNavigate("connection") }.padding(horizontal = 24.dp, vertical = 8.dp)) { DeskText(if (loading) "正在连接工作台…" else "连接已断开 · 查看连接", size = 14, color = c.mutedForeground) }
+            DeskExpandable(action.error.isNotEmpty() && current == null) { Box(Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) { SHint(action.error, true) } }
+            DeskExpandable(!online && state.sessions.isNotEmpty()) { Box(Modifier.fillMaxWidth().deskPressable(c.muted, 0.dp) { onNavigate("connection") }.semantics { role = Role.Button }.padding(horizontal = 24.dp, vertical = 8.dp)) { DeskText(if (loading) "正在连接工作台…" else "连接已断开 · 查看连接", size = 14, color = c.mutedForeground) } }
             if (groups.isEmpty()) {
                 val noResults = query.isNotBlank() || pinnedOnly
                 Column(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 24.dp, vertical = 64.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically)) {
                     if (loading) SBusy() else DeskIcon(if (noResults) "search" else "message-square", size = 32.dp, tint = c.mutedForeground)
                     SNativeText(if (noResults) "未找到会话" else if (loading) "正在连接工作台" else if (online) "暂无会话" else "尚未连接工作台", size = 16, lineHeight = 24, weight = FontWeight.Medium)
-                    if (!loading) Box(Modifier.heightIn(min = 44.dp).clip(RoundedCornerShape(8.dp)).border(1.dp, c.border, RoundedCornerShape(8.dp)).background(c.card).clickable { if (noResults) { query = ""; pinnedOnly = false } else create() }.padding(horizontal = 16.dp, vertical = 12.dp)) { DeskText(if (noResults) "查看全部" else if (online) "新建会话" else "连接工作台", size = 14, weight = FontWeight.Medium) }
+                    if (!loading) {
+                        val interaction = remember { MutableInteractionSource() }
+                        val pressed by interaction.pressedState()
+                        Box(Modifier.heightIn(min = 44.dp).pressScale(pressed, !action.busy).clip(RoundedCornerShape(8.dp)).border(1.dp, c.border, RoundedCornerShape(8.dp)).background(animatedHighlight(pressed, false, c.muted, rest = c.card)).clickable(interactionSource = interaction, indication = null, enabled = !action.busy) { if (noResults) { query = ""; pinnedOnly = false } else create() }.semantics { role = Role.Button }.padding(horizontal = 16.dp, vertical = 12.dp)) { DeskText(if (noResults) "查看全部" else if (online) "新建会话" else "连接工作台", size = 14, weight = FontWeight.Medium) }
+                    }
                 }
             } else LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 20.dp)) {
                 groups.forEach { (group, sessions) ->
                     item(key = "group:${group.first}:${group.second}") {
                         val device = if (group.first == state.serverDeviceId) "服务端" else sessions.first().device?.name ?: "未标记设备"
                         val project = group.second.split(Regex("[/\\\\]+")).filter(String::isNotEmpty).lastOrNull() ?: "普通会话"
-                        SNativeText("$device · $project", Modifier.padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 6.dp), size = 13, color = c.mutedForeground, weight = FontWeight.Medium, maxLines = 2)
+                        SNativeText("$device · $project", Modifier.animateItem(fadeInSpec = DeskMotion.fadeIn(), placementSpec = DeskMotion.contentOffset, fadeOutSpec = DeskMotion.fadeOut()).padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 6.dp), size = 13, color = c.mutedForeground, weight = FontWeight.Medium, maxLines = 2)
                     }
                     items(sessions, key = { it.id }) { session ->
                         val connected = state.devices.find { it.id == session.device?.id }
                         val deviceStatus = if (!online) "连接中断" else if (connected?.ready == true) "在线" else if (connected != null) "连接中" else "离线"
                         val menu: () -> Unit = { action.error = ""; title = session.title; activeId = session.id; mode = "menu" }
                         val interaction = remember(session.id) { MutableInteractionSource() }
-                        val pressed by interaction.collectIsPressedAsState()
-                        Column(Modifier.padding(horizontal = 16.dp)) {
+                        val pressed by interaction.pressedState()
+                        Column(Modifier.animateItem(fadeInSpec = DeskMotion.fadeIn(), placementSpec = DeskMotion.contentOffset, fadeOutSpec = DeskMotion.fadeOut()).padding(horizontal = 16.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Row(Modifier.weight(1f).heightIn(min = 54.dp).clip(RoundedCornerShape(8.dp)).background(if (pressed) c.accent else Color.Transparent).combinedClickable(interactionSource = interaction, indication = null, onClick = { action.run { repository.selectSession(session.id); onClose() } }, onLongClick = menu).padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    if (session.id in state.pins) DeskIcon("pin", size = 16.dp, tint = c.mutedForeground)
+                                Row(Modifier.weight(1f).heightIn(min = 54.dp).clip(RoundedCornerShape(8.dp)).background(animatedHighlight(pressed, activeId == session.id, c.accent)).combinedClickable(interactionSource = interaction, indication = null, onClick = { action.run { repository.selectSession(session.id); onClose() } }, onLongClick = { haptics.threshold(); menu() }).padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    AnimatedVisibility(session.id in state.pins, enter = fadeIn(DeskMotion.fadeIn()) + scaleIn(DeskMotion.icon(), .5f), exit = fadeOut(DeskMotion.fadeOut()) + scaleOut(DeskMotion.icon(), .5f)) { DeskIcon("pin", size = 16.dp, tint = c.mutedForeground) }
                                     Column(Modifier.weight(1f)) {
                                         SNativeText(session.title, size = 15, lineHeight = 21, maxLines = 1)
                                         SNativeText("$deviceStatus · ${date(session.updatedAt)}", size = 13, lineHeight = 19, color = c.mutedForeground)
                                     }
                                 }
-                                SIconButton("ellipsis", session.title + "的操作", onClick = menu)
+                                SIconButton("ellipsis", session.title + "的操作", selected = activeId == session.id, onClick = menu)
                             }
                             SDivider()
                         }
@@ -883,33 +921,37 @@ fun ChatsScreen(repository: WorkbenchRepository, onNavigate: (String) -> Unit, o
             }
         }
     }
-    if (current != null) Dialog(onDismissRequest = closeMenu, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
-        BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black.copy(alpha = .35f)).imePadding()) {
-            Box(Modifier.matchParentSize().clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = closeMenu))
-            val wide = maxWidth >= 640.dp
-            Column(Modifier.align(if (wide) Alignment.Center else Alignment.BottomCenter).widthIn(max = if (wide) 448.dp else maxWidth).fillMaxWidth().clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp, bottomStart = if (wide) 16.dp else 0.dp, bottomEnd = if (wide) 16.dp else 0.dp)).border(1.dp, c.border, RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp)).background(c.card).navigationBarsPadding().padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 14.dp)) {
-                Box(Modifier.align(Alignment.CenterHorizontally).padding(bottom = 20.dp).size(width = 36.dp, height = 4.dp).clip(CircleShape).background(c.border))
-                SNativeText(if (mode == "rename") "重命名会话" else if (mode == "delete") "删除「${current.title}」？" else current.title, Modifier.padding(bottom = 12.dp), size = 18, lineHeight = 28, weight = FontWeight.SemiBold, maxLines = 2)
-                if (mode == "menu") {
-                    SMenuAction(if (current.id in state.pins) "取消置顶" else "置顶会话") { repository.togglePin(current.id); closeMenu() }
+    DeskSheetOverlay(current != null, closeMenu, dismissible = !action.busy, scrimAlpha = DeskMotion.SheetScrim, maxWidth = 448.dp, centeredWhenWide = true, bordered = true, scrimLabel = "关闭会话操作") { sheet ->
+        val target = current ?: shownSession ?: return@DeskSheetOverlay
+        Column(Modifier.fillMaxWidth().then(sheet.dragHandle)) {
+            SheetGrabber()
+            AnimatedContent(mode, transitionSpec = { fadeIn(DeskMotion.fadeIn()) togetherWith fadeOut(DeskMotion.fadeOut()) }, label = "menu title") { m ->
+                SNativeText(if (m == "rename") "重命名会话" else if (m == "delete") "删除「${target.title}」？" else target.title, Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 12.dp), size = 18, lineHeight = 28, weight = FontWeight.SemiBold, maxLines = 2)
+            }
+        }
+        AnimatedContent(mode, Modifier.padding(horizontal = 16.dp).padding(bottom = 14.dp), transitionSpec = { (fadeIn(DeskMotion.fadeIn()) togetherWith fadeOut(DeskMotion.fadeOut())).using(androidx.compose.animation.SizeTransform(clip = true) { _, _ -> DeskMotion.layoutSize }) }, label = "menu body") { m ->
+            Column {
+                if (m == "menu") {
+                    SMenuAction(if (target.id in state.pins) "取消置顶" else "置顶会话") { repository.togglePin(target.id); haptics.toggle(target.id !in state.pins); closeMenu() }
                     SMenuAction("重命名", online) { mode = "rename" }
                     SMenuAction("删除会话", online) { mode = "delete" }
                 } else {
-                    if (mode == "rename") {
+                    if (m == "rename") {
                         val focus = remember { FocusRequester() }
                         LaunchedEffect(Unit) { focus.requestFocus() }
                         BasicTextField(title, { title = it.take(120) }, Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(c.muted).padding(horizontal = 16.dp, vertical = 12.dp).focusRequester(focus).semantics { contentDescription = "会话名称" }, singleLine = true, textStyle = TextStyle(color = c.foreground, fontSize = 14.sp, platformStyle = PlatformTextStyle(includeFontPadding = true)), cursorBrush = SolidColor(c.foreground))
                     }
                     else DeskText("此会话的服务端记录将被删除。", Modifier.padding(bottom = 12.dp), color = c.mutedForeground)
-                    SMenuAction(if (action.busy) "正在保存…" else if (mode == "rename") "保存名称" else "确认删除", !action.busy && online && (mode != "rename" || title.isNotBlank())) {
+                    SMenuAction(if (action.busy) "正在保存…" else if (m == "rename") "保存名称" else "确认删除", !action.busy && online && (m != "rename" || title.isNotBlank())) {
                         action.run {
-                            if (mode == "rename") repository.command("session.rename", fields("sessionId" to current.id, "title" to title.trim()))
-                            else repository.command("session.delete", fields("sessionId" to current.id))
+                            if (m == "rename") repository.command("session.rename", fields("sessionId" to target.id, "title" to title.trim()))
+                            else repository.command("session.delete", fields("sessionId" to target.id))
+                            haptics.confirm()
                             activeId = null
                         }
                     }
                 }
-                if (action.error.isNotEmpty()) Box(Modifier.padding(vertical = 8.dp)) { SHint(action.error, true) }
+                DeskExpandable(action.error.isNotEmpty()) { Box(Modifier.padding(vertical = 8.dp)) { SHint(action.error, true) } }
                 SMenuAction("取消", !action.busy, closeMenu)
             }
         }
@@ -919,16 +961,19 @@ fun ChatsScreen(repository: WorkbenchRepository, onNavigate: (String) -> Unit, o
 @Composable private fun SIconButton(name: String, label: String, enabled: Boolean = true, selected: Boolean = false, onClick: () -> Unit) {
     val c = LocalDeskColors.current
     val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    Box(Modifier.size(44.dp).clip(RoundedCornerShape(8.dp)).background(if (pressed) c.muted else Color.Transparent).alpha(if (enabled) 1f else .4f).clickable(enabled = enabled, interactionSource = interaction, indication = null, onClick = onClick).semantics { contentDescription = label; this.selected = selected; role = Role.Button }, contentAlignment = Alignment.Center) {
+    val pressed by interaction.pressedState()
+    val highlight = animatedHighlight(pressed && enabled, selected, c.muted, c.accent)
+    val alpha = animatedEnabledAlpha(enabled, .4f)
+    Box(Modifier.size(44.dp).graphicsLayer { this.alpha = alpha }.pressScale(pressed, enabled, DeskMotion.IconPressScale).clip(RoundedCornerShape(8.dp)).background(highlight).clickable(enabled = enabled, interactionSource = interaction, indication = null, onClick = onClick).semantics { contentDescription = label; this.selected = selected; role = Role.Button }, contentAlignment = Alignment.Center) {
         DeskIcon(name, size = if (name == "list-filter") 18.dp else 20.dp, strokeWidth = 1.65f)
     }
 }
 
 @Composable private fun SMenuAction(label: String, enabled: Boolean = true, onClick: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(if (pressed) LocalDeskColors.current.muted else Color.Transparent).alpha(if (enabled) 1f else .4f).clickable(enabled = enabled, interactionSource = interaction, indication = null, onClick = onClick).semantics { role = Role.Button }.padding(horizontal = 12.dp, vertical = 14.dp)) { SNativeText(label, size = 16, lineHeight = 24) }
+    val pressed by interaction.pressedState()
+    val alpha = animatedEnabledAlpha(enabled, .4f)
+    Box(Modifier.fillMaxWidth().graphicsLayer { this.alpha = alpha }.clip(RoundedCornerShape(12.dp)).background(animatedHighlight(pressed && enabled, false, LocalDeskColors.current.muted)).clickable(enabled = enabled, interactionSource = interaction, indication = null, onClick = onClick).semantics { role = Role.Button }.padding(horizontal = 12.dp, vertical = 14.dp)) { SNativeText(label, size = 16, lineHeight = 24) }
 }
 
 @Composable private fun ConnectionContent(state: WorkbenchState, repo: WorkbenchRepository, onNavigate: (String) -> Unit, onClose: () -> Unit) {
@@ -1019,12 +1064,12 @@ fun ChatsScreen(repository: WorkbenchRepository, onNavigate: (String) -> Unit, o
         SRow("连接遇到问题？", icon = "circle-help", last = state.endpoint.isEmpty() || savedDirect != direct, onClick = { onNavigate("help") })
         if (state.endpoint.isNotEmpty() && savedDirect == direct) SRow("忘记此地址", danger = true, last = true, onClick = { forget = true })
     }
-    if (forget) SSection("忘记此地址？") {
+    DeskExpandable(forget) { SSection("忘记此地址？") {
         Column(Modifier.padding(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             DeskText("下次连接时需要重新输入工作台地址。")
             SHint((if (savedDirect) "下次直连时需要重新输入服务凭据。" else "") + "此主机和端口已保存的证书指纹也会清除。")
             SAction("忘记地址", busy = action.busy) { action.run { enterWhenReady = false; repo.forgetEndpoint(); forget = false; changingAddress = false; service = ""; browser = ""; credential = ""; pin = ""; savedPin = "" } }
             SAction("取消", secondary = true) { forget = false }
         }
-    }
+    } }
 }

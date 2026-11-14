@@ -30,17 +30,3 @@ internal class PlatformPanVelocity : AutoCloseable {
     fun velocity():Offset {tracker.computeCurrentVelocity(1000);return Offset(tracker.xVelocity,tracker.yVelocity)}
     override fun close(){tracker.recycle()}
 }
-
-/** The model sheet uses the last MOVE delta, as its baseline PanResponder does; UP keeps it. */
-internal class LastMoveVelocity(time:Long,position:Offset) {
-    private var previousTime=time
-    private var previousPosition=position
-    var velocity=Offset.Zero
-        private set
-    fun add(time:Long,position:Offset,pressed:Boolean) {
-        if(!pressed)return
-        val elapsed=time-previousTime
-        if(elapsed>0)velocity=(position-previousPosition)*(1000f/elapsed)
-        previousTime=time;previousPosition=position
-    }
-}

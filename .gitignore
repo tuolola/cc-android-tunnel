@@ -16,3 +16,23 @@ __pycache__/
 *.jks
 *.keystore
 /artifacts/
+
+# Local AI instructions, plans and verification artifacts
+/.local/
+/.agents/
+/.codex/
+/.claude/
+/.cursor/
+/.gemini/
+.aider*
+AGENTS.md
+AGENTS.override.md
+CLAUDE.md
+GEMINI.md
+SKILL.md
+/.github/copilot-instructions.md
+/.github/instructions/
+/.github/prompts/
+
+# Machine-local editor settings
+/.vscode/

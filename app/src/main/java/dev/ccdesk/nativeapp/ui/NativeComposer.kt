@@ -27,7 +27,7 @@ import kotlin.math.ceil
 import kotlin.math.floor
 
 /** System editor preserves Android selection handles, IME composition and the native context menu. */
-@Composable internal fun NativeComposer(value:String,onChange:(String)->Unit,placeholder:String,enabled:Boolean,modifier:Modifier=Modifier) {
+@Composable internal fun NativeComposer(value:String,onChange:(String)->Unit,placeholder:String,enabled:Boolean,modifier:Modifier=Modifier,onFocusChange:(Boolean)->Unit={}) {
     val colors=LocalDeskColors.current
     val context=LocalContext.current
     val configuration=LocalConfiguration.current
@@ -35,6 +35,7 @@ import kotlin.math.floor
     // so resolve the current AppCompat default without replacing the live editor/Editable.
     val hintColors=remember(context,configuration.uiMode){AppCompatEditText(context).hintTextColors}
     val change by rememberUpdatedState(onChange)
+    val focusChange by rememberUpdatedState(onFocusChange)
     val editor=remember{arrayOfNulls<ComposerEditText>(1)}
     var hasFocus by remember{mutableStateOf(false)}
     AndroidView(modifier=modifier.semantics {
@@ -48,7 +49,7 @@ import kotlin.math.floor
         insertTextAtCursor { if(enabled){editor[0]?.let{view->val a=view.selectionStart.coerceAtLeast(0);val b=view.selectionEnd.coerceAtLeast(0);view.text?.replace(minOf(a,b),maxOf(a,b),it.text)};true}else false }
     },factory={ context->ComposerEditText(context).also { view->
         editor[0]=view
-        view.setOnFocusChangeListener{_,focused->hasFocus=focused}
+        view.setOnFocusChangeListener{_,focused->hasFocus=focused;focusChange(focused)}
         view.addTextChangedListener(object:TextWatcher {
             override fun beforeTextChanged(s:CharSequence?,start:Int,count:Int,after:Int){}
             override fun onTextChanged(s:CharSequence?,start:Int,before:Int,count:Int){}

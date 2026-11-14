@@ -47,7 +47,7 @@ class ChatInteractionTest {
         compose.setContent{DeskTheme{ChatTranscriptRow(row,true,false,false){type,fields->sent+=type to fields}}}
         compose.onNodeWithText("提交回答").assertIsNotEnabled()
         compose.onNodeWithText("Log").assertIsOff().assert(SemanticsMatcher.expectValue(SemanticsProperties.Role,Role.Checkbox)).performClick();compose.onNodeWithText("Summary").performClick()
-        compose.onNodeWithText("✓  Log").assertIsOn();compose.onNodeWithText("✓  Summary").assertIsOn()
+        compose.onNodeWithText("Log").assertIsOn();compose.onNodeWithText("Summary").assertIsOn()
         compose.onNodeWithContentDescription("自己填写或补充回答").performTextInput("Notes")
         compose.onNodeWithText("提交回答").performClick()
         compose.runOnIdle{val frame=sent.single();assertEquals("approval.reply",frame.first);assertTrue(frame.second.getBoolean("allowed"));assertEquals("question-7",frame.second.getString("approvalId"));assertEquals("Log, Summary, Notes",frame.second.getJSONObject("answers").getString("Choose outputs"))}

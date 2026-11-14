@@ -17,8 +17,6 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="cc-android-tunnel" />
-                <!-- Retain existing deep links for installed clients. -->
-                <data android:scheme="ccdesk" />
             </intent-filter>
         </activity>
     </application>

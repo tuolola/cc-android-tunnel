@@ -34,15 +34,6 @@ class GestureInteractionTest {
         }
     }
 
-    @Test fun modelSheetKeepsTheLastMoveVelocityOnRelease() {
-        val velocity=LastMoveVelocity(1000,Offset.Zero)
-        velocity.add(1020,Offset(0f,20f),true)
-        velocity.add(1040,Offset(0f,100f),true)
-        assertEquals(4000f,velocity.velocity.y,.01f)
-        velocity.add(1100,Offset(0f,100f),false)
-        assertEquals(4000f,velocity.velocity.y,.01f)
-    }
-
     @Test fun cancelledDrawerDragReturnsToItsStartingStateWithoutDispatchingAnAction() {
         val changes=mutableListOf<Boolean>()
         compose.setContent{
@@ -87,7 +78,7 @@ class GestureInteractionTest {
         compose.runOnIdle{assertTrue(open.value)}
     }
 
-    @Test fun drawerUses220msCubicOutForOpeningAndClosing() {
+    @Test fun drawerSettlesOnAMonotonicCriticallyDampedSpring() {
         val open=mutableStateOf(false)
         compose.mainClock.autoAdvance=false
         compose.setContent{
@@ -105,18 +96,14 @@ class GestureInteractionTest {
         }
         compose.mainClock.advanceTimeByFrame();compose.mainClock.advanceTimeByFrame()
         assertEquals(0f,fraction(),.001f)
-        compose.runOnIdle{open.value=true}
-        compose.mainClock.advanceTimeByFrame();compose.mainClock.advanceTimeByFrame()
-        compose.mainClock.advanceTimeBy(80)
-        // 1-(1-80/220)^3 = .7423; tolerate one displayed frame of quantization.
-        assertTrue("Opening must follow cubic-out",fraction() in .70f.. .81f)
-        compose.mainClock.advanceTimeBy(144)
-        assertEquals(1f,fraction(),.001f)
-        compose.runOnIdle{open.value=false}
-        compose.mainClock.advanceTimeByFrame();compose.mainClock.advanceTimeByFrame()
-        compose.mainClock.advanceTimeBy(80)
-        assertTrue("Closing must follow cubic-out",fraction() in .19f.. .30f)
-        compose.mainClock.advanceTimeBy(144)
-        assertEquals(0f,fraction(),.001f)
+        for((target,label) in listOf(true to "opening",false to "closing")){
+            compose.runOnIdle{open.value=target}
+            compose.mainClock.advanceTimeByFrame()
+            val samples=(0 until 40).map{compose.mainClock.advanceTimeByFrame();fraction()}
+            samples.zipWithNext().forEach{(a,b)->assertTrue("$label must not reverse or overshoot ($a -> $b)",if(target)b>=a-.002f else b<=a+.002f)}
+            assertTrue("$label must be clearly under way after five frames",if(target)samples[4]>.3f else samples[4]<.7f)
+            assertTrue("$label must show intermediate positions",samples.count{it in .05f..<.95f}>=3)
+            assertEquals("$label must settle",if(target)1f else 0f,samples.last(),.001f)
+        }
     }
 }
