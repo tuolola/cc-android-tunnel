@@ -1,3 +1,7 @@
+// Copyright 2026 CC Desk Android contributors.
+// Native Android rewrite/adaptation of CC Desk Tunnel, modified in 2026.
+// Apache-2.0; upstream attribution and third-party exceptions are listed in NOTICE.
+
 package dev.ccdesk.nativeapp.ui
 
 import android.text.Spannable

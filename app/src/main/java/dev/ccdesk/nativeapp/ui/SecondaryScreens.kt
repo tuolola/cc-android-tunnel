@@ -1,3 +1,7 @@
+// Copyright 2026 CC Desk Android contributors.
+// Native Android rewrite/adaptation of CC Desk Tunnel, modified in 2026.
+// Apache-2.0; upstream attribution and third-party exceptions are listed in NOTICE.
+
 @file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 
 package dev.ccdesk.nativeapp.ui
@@ -88,6 +92,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.viewinterop.AndroidView
+import dev.ccdesk.nativeapp.R
 import dev.ccdesk.nativeapp.core.WorkbenchRepository
 import dev.ccdesk.nativeapp.core.WorkbenchState
 import dev.ccdesk.nativeapp.core.normalizeEndpoint
@@ -95,7 +100,9 @@ import dev.ccdesk.nativeapp.core.normalizeServiceAddress
 import dev.ccdesk.nativeapp.core.normalizeFingerprint
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URI
@@ -147,15 +154,22 @@ private class ScreenAction(private val scope: CoroutineScope) {
 @Composable
 fun SecondaryScreen(route: String, repository: WorkbenchRepository, onNavigate: (String) -> Unit, onClose: () -> Unit, onOpenChat: () -> Unit = onClose) {
     val state by repository.state.collectAsState()
-    val title = when (route) { "settings" -> "设置"; "connection" -> "连接工作台"; "usage" -> "账号与用量"; "access" -> "访问管理"; "notifications" -> "通知"; else -> "帮助" }
-    SettingsPanel(route, title, onNavigate, onClose) {
+    val licenseDocument = licenseDocuments.firstOrNull { route == "licenses/${it.id}" }
+    val licenses = route == "licenses" || licenseDocument != null
+    val title = licenseDocument?.title ?: when (route) { "settings" -> "设置"; "connection" -> "连接工作台"; "usage" -> "账号与用量"; "access" -> "访问管理"; "notifications" -> "通知"; "licenses" -> "开源许可与致谢"; else -> "帮助" }
+    SettingsPanel(route, title, onNavigate, onClose,
+        selectedTab = if (licenses) "help" else route,
+        onBack = if (licenses) ({ onNavigate(if (licenseDocument == null) "help" else "licenses") }) else null,
+        backLabel = if (licenseDocument == null) "返回帮助" else "返回开源许可与致谢") {
         key(route, if (route == "access") state.endpoint + state.webSessionId else "") {
-            when (route) {
+            if (licenseDocument != null) LicenseDocumentContent(licenseDocument)
+            else when (route) {
                 "settings" -> SettingsContent(state, repository, onNavigate)
                 "connection" -> ConnectionContent(state, repository, onNavigate, onOpenChat)
                 "usage" -> UsageContent(state, repository, onNavigate)
                 "access" -> AccessContent(state, repository, onNavigate)
                 "notifications" -> NotificationContent(state, repository, onOpenChat)
+                "licenses" -> OpenSourceContent(onNavigate)
                 else -> HelpContent(onNavigate)
             }
         }
@@ -163,19 +177,21 @@ fun SecondaryScreen(route: String, repository: WorkbenchRepository, onNavigate: 
 }
 
 @Composable
-internal fun SettingsPanel(route: String, title: String, onNavigate: (String) -> Unit, onClose: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+internal fun SettingsPanel(route: String, title: String, onNavigate: (String) -> Unit, onClose: () -> Unit,
+    selectedTab: String = route, onBack: (() -> Unit)? = null, backLabel: String = "返回", content: @Composable ColumnScope.() -> Unit) {
     val c = LocalDeskColors.current
     var entered by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { entered = true }
     val progress by animateFloatAsState(if (entered) 1f else 0f, tween(160, easing = secondaryTiming), label = "settings entrance")
     val slide = with(LocalDensity.current) { 25.dp.toPx() }
-    BackHandler(onBack = onClose)
+    BackHandler(onBack = onBack ?: onClose)
     Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = .5f))) {
         Box(Modifier.matchParentSize().clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClose))
         BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding().imePadding().padding(16.dp), contentAlignment = Alignment.Center) {
             val panelModifier = if (maxWidth >= 736.dp) Modifier.heightIn(max = 780.dp) else Modifier
             Column(panelModifier.fillMaxHeight().widthIn(max = 672.dp).fillMaxWidth().graphicsLayer { alpha = progress; translationY = slide * (1f - progress) }.clip(RoundedCornerShape(12.dp)).border(1.dp, c.border, RoundedCornerShape(12.dp)).background(c.card).pointerInput(Unit) { detectTapGestures { } }.padding(1.dp)) {
                 Row(Modifier.fillMaxWidth().height(54.dp).padding(start = 16.dp, end = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (onBack != null) DeskIconButton("arrow-left", backLabel, onClick = onBack)
                     DeskText(title, Modifier.weight(1f).semantics { heading() }, size = 17, weight = FontWeight.SemiBold)
                     val interaction = remember { MutableInteractionSource() }
                     val pressed by interaction.collectIsPressedAsState()
@@ -187,13 +203,13 @@ internal fun SettingsPanel(route: String, title: String, onNavigate: (String) ->
                 val tabPositions = remember { mutableStateMapOf<String, Int>() }
                 // LayoutCoordinates use physical pixels; RN scrollTo uses dp and includes the 12 dp content inset.
                 val tabRevealInset = with(LocalDensity.current) { (26.dp - 12.dp).roundToPx() }
-                LaunchedEffect(route, tabPositions[route]) { tabPositions[route]?.let { tabScroll.scrollTo((it - tabRevealInset).coerceAtLeast(0)) } }
+                LaunchedEffect(selectedTab, tabPositions[selectedTab]) { tabPositions[selectedTab]?.let { tabScroll.scrollTo((it - tabRevealInset).coerceAtLeast(0)) } }
                 Row(Modifier.fillMaxWidth().horizontalScroll(tabScroll).padding(start = 12.dp, end = 12.dp, bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
                     settingTabs.forEach { (key, label) ->
-                        val selected = route == key
+                        val selected = selectedTab == key
                         val interaction = remember(key) { MutableInteractionSource() }
                         val pressed by interaction.collectIsPressedAsState()
-                        Box(Modifier.onGloballyPositioned { tabPositions[key] = it.positionInParent().x.roundToInt() }.height(32.dp).clip(RoundedCornerShape(8.dp)).background(if (pressed) c.muted else if (selected) c.accent else Color.Transparent).clickable(interactionSource = interaction, indication = null) { if (!selected) onNavigate(key) }.semantics { this.selected = selected; role = Role.Tab }.padding(horizontal = 10.dp), contentAlignment = Alignment.Center) {
+                        Box(Modifier.onGloballyPositioned { tabPositions[key] = it.positionInParent().x.roundToInt() }.height(32.dp).clip(RoundedCornerShape(8.dp)).background(if (pressed) c.muted else if (selected) c.accent else Color.Transparent).clickable(interactionSource = interaction, indication = null) { if (route != key) onNavigate(key) }.semantics { this.selected = selected; role = Role.Tab }.padding(horizontal = 10.dp), contentAlignment = Alignment.Center) {
                             DeskText(label, size = 14, color = if (selected) c.foreground else c.mutedForeground, weight = if (selected) FontWeight.Medium else FontWeight.Normal)
                         }
                     }
@@ -292,12 +308,12 @@ private class SettingsLineHeight(private val height: Int) : LineHeightSpan {
     }
 }
 
-@Composable private fun SRow(label: String, detail: String? = null, icon: String? = null, danger: Boolean = false, last: Boolean = false, onClick: (() -> Unit)? = null) {
+@Composable private fun SRow(label: String, detail: String? = null, icon: String? = null, danger: Boolean = false, last: Boolean = false, accessibilityLabel: String? = null, onClick: (() -> Unit)? = null) {
     val c = LocalDeskColors.current
     val red = if (c.background == Color(0xFF191919)) Color(0xFFFF6467) else Color(0xFFE7000B)
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).background(if (pressed) c.muted else Color.Transparent).then(if (onClick != null) Modifier.clickable(interactionSource = interaction, indication = null, onClick = onClick).semantics { role = Role.Button } else Modifier).padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).background(if (pressed) c.muted else Color.Transparent).then(if (onClick != null) Modifier.clickable(interactionSource = interaction, indication = null, onClick = onClick).semantics { role = Role.Button; if (accessibilityLabel != null) contentDescription = accessibilityLabel } else Modifier).padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
         if (icon != null) DeskIcon(icon, size = 18.dp, tint = if (danger) red else c.mutedForeground, strokeWidth = 1.65f)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             SNativeText(label, size = 15, lineHeight = 21, color = if (danger) red else c.foreground)
@@ -728,6 +744,53 @@ private val helpTopics = listOf(
         }
     }
     SAction("打开连接设置", secondary = true) { onNavigate("connection") }
+    SAction("开源许可与致谢", secondary = true) { onNavigate("licenses") }
+}
+
+private data class LicenseDocument(val id: String, val title: String, val resource: Int)
+private val licenseDocuments = listOf(
+    LicenseDocument("license", "LICENSE · Apache 2.0", R.raw.app_license),
+    LicenseDocument("notice", "NOTICE · 来源与修改说明", R.raw.app_notice),
+    LicenseDocument("third-party", "第三方开源许可汇总", R.raw.third_party_notices),
+    LicenseDocument("lucide", "Lucide 图标许可", R.raw.lucide_license),
+    LicenseDocument("bootstrap", "Bootstrap Icons 许可", R.raw.bootstrap_icons_license),
+    LicenseDocument("highlight", "语法高亮规则许可", R.raw.highlight_grammar_license),
+    LicenseDocument("text-layout", "文本行高实现许可", R.raw.text_line_height_license),
+)
+
+@Composable private fun OpenSourceContent(onNavigate: (String) -> Unit) {
+    val context = LocalContext.current
+    var linkError by remember { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        SNativeText("CC Desk Android", size = 17, lineHeight = 24, weight = FontWeight.SemiBold, heading = true)
+        SNativeText("基于 sun168567/cc-desk-tunnel（Apache License 2.0）开发的独立 Android 客户端。本项目非上游官方发行，与上游项目无隶属或背书关系。", size = 14, lineHeight = 22, selectable = true)
+    }
+    SSection("项目来源") {
+        listOf("上游项目" to "https://github.com/sun168567/cc-desk-tunnel", "本项目仓库" to "https://github.com/tuolola/cc-desk-Android").forEachIndexed { index, (label, url) ->
+            SRow(label, url, "globe", last = index == 1, accessibilityLabel = "打开$label：$url", onClick = {
+                linkError = runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }.isFailure
+            })
+        }
+    }
+    if (linkError) SHint("无法打开浏览器，请检查是否已安装可处理网页链接的应用。", error = true)
+    SHint("以下全文随应用打包，无需联网即可阅读、选择和复制。感谢上游作者及各开源项目的贡献。")
+    SSection("离线许可全文") {
+        licenseDocuments.forEachIndexed { index, document ->
+            SRow(document.title, icon = "book-open", last = index == licenseDocuments.lastIndex,
+                accessibilityLabel = "查看${document.title}", onClick = { onNavigate("licenses/${document.id}") })
+        }
+    }
+}
+
+@Composable private fun LicenseDocumentContent(document: LicenseDocument) {
+    val resources = LocalContext.current.resources
+    val text by produceState<String?>(initialValue = null, resources, document.resource) {
+        value = withContext(Dispatchers.IO) {
+            resources.openRawResource(document.resource).bufferedReader(Charsets.UTF_8).use { it.readText() }
+        }
+    }
+    if (text == null) SHint("正在读取许可文本…")
+    else SNativeText(text.orEmpty(), size = 13, lineHeight = 20, selectable = true)
 }
 
 /** Baseline entries fade in; removal has no exit fade. Layout changes animate separately. */

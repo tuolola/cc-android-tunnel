@@ -1,0 +1,45 @@
+CC Desk Android
+Copyright 2026 CC Desk Android contributors
+https://github.com/tuolola/cc-desk-Android
+
+This independently maintained, unofficial Android client is based on
+CC Desk Tunnel (https://github.com/sun168567/cc-desk-tunnel), licensed under
+the Apache License, Version 2.0. It is not an official release of that project
+and does not imply endorsement by its authors.
+
+Upstream attribution retained from CC Desk Tunnel:
+CC Desk Tunnel
+Copyright 2026 The CC Desk Tunnel authors
+
+This product is an independent work. It is not affiliated with, endorsed by or
+sponsored by Anthropic. "Claude" and "Claude Code" are trademarks of Anthropic.
+
+Modifications in this distribution (2026): the Android client has been
+rewritten using Kotlin, Jetpack Compose and Android platform controls, with
+native networking, encrypted credential storage, Markdown rendering and
+Android-specific layout, gesture and lifecycle handling. The client retains
+upstream-derived interaction design and service protocol compatibility.
+It is distributed as an independent native source repository.
+
+The project's own source and upstream-derived portions are distributed under
+the Apache License, Version 2.0; see LICENSE. Third-party components retain
+their own licenses. Copyright statements and license terms for bundled
+libraries, icons and adapted algorithms are provided in:
+app/src/main/res/raw/third_party_notices.txt
+app/src/main/res/raw/lucide_license.txt
+app/src/main/res/raw/bootstrap_icons_license.txt
+app/src/main/res/raw/highlight_grammar_license.txt
+app/src/main/res/raw/text_line_height_license.txt
+
+These notices and the project license are also available offline in the app
+under Help > Open-source licenses and acknowledgements
+(帮助 > 开源许可与致谢).
+
+Claude Code and the Claude Agent SDK are separate upstream server-side
+software and remain subject to Anthropic's terms. This Android APK does not
+bundle those products or the desktop/server distribution's Node.js, Electron,
+OpenSSH or PowerShell components. Its attribution to adapted text-layout
+code does not mean a React Native runtime is included.
+
+This NOTICE supplies attribution information; it does not modify the terms
+of any license or grant trademark rights.

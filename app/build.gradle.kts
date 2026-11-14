@@ -28,6 +28,23 @@ configurations.configureEach { exclude(group = "org.jetbrains", module = "annota
 
 apply(from = rootProject.file("gradle/native-boundary.gradle.kts"))
 
+val verifyBundledLicenses = tasks.register("verifyBundledLicenses") {
+    group = "verification"
+    description = "Keep the offline license and attribution documents in sync with the repository."
+    val copies = mapOf("LICENSE" to "app_license.txt", "NOTICE" to "app_notice.txt")
+    inputs.files(copies.keys.map { rootProject.file(it) })
+    inputs.files(copies.values.map { file("src/main/res/raw/$it") })
+    doLast {
+        copies.forEach { (source, bundled) ->
+            fun normalized(text: String) = text.replace("\r\n", "\n").trimEnd()
+            check(normalized(rootProject.file(source).readText()) == normalized(file("src/main/res/raw/$bundled").readText())) {
+                "$source and the offline $bundled document differ; update both before packaging."
+            }
+        }
+    }
+}
+tasks.named("preBuild") { dependsOn(verifyBundledLicenses) }
+
 tasks.named("verifyNativeBoundary") {
     doLast {
         val nativeRoot = rootProject.projectDir.canonicalFile.toPath()
