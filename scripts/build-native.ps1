@@ -26,7 +26,7 @@ try {
 } finally { Pop-Location }
 $output = Join-Path $projectRoot 'artifacts'
 New-Item -ItemType Directory -Force -Path $output | Out-Null
-$apk = Join-Path $output 'CC-Android-Tunnel-debug.apk'
+$apk = Join-Path $output 'CCtunnel.apk'
 Copy-Item -LiteralPath (Join-Path $nativeRoot 'app/build/outputs/apk/debug/app-debug.apk') -Destination $apk
 Get-FileHash -LiteralPath $apk -Algorithm SHA256
 Write-Output ('APK: ' + $apk)

@@ -109,10 +109,10 @@ Windows 下将 `ANDROID_HOME` 指向 SDK 目录，然后执行：
 
 ```powershell
 .\scripts\build-native.ps1
-adb install -r .\artifacts\CC-Android-Tunnel-debug.apk
+adb install -r .\artifacts\CCtunnel.apk
 ```
 
-脚本会构建调试 APK、运行 JVM 测试和 Android Lint，将 APK 复制到 **`artifacts/CC-Android-Tunnel-debug.apk`**，并输出 SHA-256。可传入 `-AndroidSdk <路径>` 和 `-GradleCache <路径>`；`-SkipTests` 会跳过 JVM 测试和 Lint。
+脚本会构建调试 APK、运行 JVM 测试和 Android Lint，将 APK 复制到 **`artifacts/CCtunnel.apk`**，并输出 SHA-256。可传入 `-AndroidSdk <路径>` 和 `-GradleCache <路径>`；`-SkipTests` 会跳过 JVM 测试和 Lint。
 
 也可以在不纳入版本控制的 `local.properties` 中配置 `sdk.dir`，直接调用 Gradle：
 

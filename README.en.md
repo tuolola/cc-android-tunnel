@@ -109,10 +109,10 @@ On Windows, set `ANDROID_HOME` to your SDK directory, then run:
 
 ```powershell
 .\scripts\build-native.ps1
-adb install -r .\artifacts\CC-Android-Tunnel-debug.apk
+adb install -r .\artifacts\CCtunnel.apk
 ```
 
-The helper builds the debug APK, runs JVM tests and Android Lint, copies the APK to **`artifacts/CC-Android-Tunnel-debug.apk`**, and prints its SHA-256. It accepts `-AndroidSdk <path>` and `-GradleCache <path>`; `-SkipTests` omits JVM tests and Lint.
+The helper builds the debug APK, runs JVM tests and Android Lint, copies the APK to **`artifacts/CCtunnel.apk`**, and prints its SHA-256. It accepts `-AndroidSdk <path>` and `-GradleCache <path>`; `-SkipTests` omits JVM tests and Lint.
 
 Alternatively, configure `sdk.dir` in the untracked `local.properties` and run Gradle directly:
 
