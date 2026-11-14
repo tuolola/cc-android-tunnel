@@ -17,6 +17,7 @@
 </p>
 
 <p>
+  <a href="https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.1-native/CCtunnel.apk"><img src="https://img.shields.io/badge/APK-1.0.1--native-16a34a?style=for-the-badge" alt="下载 CCtunnel 1.0.1-native 公开测试版 APK" /></a>
   <a href="#快速开始"><img src="https://img.shields.io/badge/使用教程-从服务器到手机-2563eb?style=for-the-badge" alt="从零开始使用" /></a>
   <a href="#验证与验收"><img src="https://img.shields.io/badge/验证-测试与审计-0f766e?style=for-the-badge" alt="测试与审计" /></a>
   <a href="https://github.com/sun168567/cc-desk-tunnel"><img src="https://img.shields.io/badge/项目来源-cc--desk--tunnel-475569?style=for-the-badge" alt="上游项目" /></a>
@@ -247,9 +248,11 @@ sudo cc-desk-tunnel summary
 
 **操作位置：Android 手机；需要自行构建时在开发电脑操作。**
 
-1. 查看[本项目 Releases](https://github.com/tuolola/cc-android-tunnel/releases)是否有发布的 Android APK。若该版本没有 APK，按下面的[从源码构建 Android App](#从源码构建-android-app)生成 `CCtunnel.apk`；上游发布页的 Windows/macOS/Linux 包不能安装到手机。
-2. 将来自本仓库发布或你自己构建的 APK 传到手机安装。也可以连接 USB 调试后，在开发电脑执行 `adb install -r .\artifacts\CCtunnel.apk`。
+1. [直接下载 CCtunnel.apk（v1.0.1-native）](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.1-native/CCtunnel.apk)。适用于 **Android 7.0 及以上**，当前为 **Debug 签名的公开测试版**。查看[版本发布说明](https://github.com/tuolola/cc-android-tunnel/releases/tag/v1.0.1-native)和 [SHA256SUMS.txt 校验清单](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.1-native/SHA256SUMS.txt)。
+2. 核对 SHA-256 后将 APK 传到手机安装。也可以连接 USB 调试，在 APK 所在目录执行 `adb install -r .\CCtunnel.apk`。已有应用须同包名、同签名且版本允许更新，才能覆盖安装。
 3. 打开手机上的 **CCtunnel**。手机只需安装 APK；Node、Docker、Android Studio 均不需要安装到手机。
+
+需要自行构建时，见[从源码构建 Android App](#从源码构建-android-app)。上游发布页的 Windows/macOS/Linux 包用于电脑，不能安装到手机。
 
 **完成标志：** 手机可以打开 App 的“连接工作台”页面。
 
@@ -319,7 +322,7 @@ sudo cc-desk-tunnel summary
 
 ## 从源码构建 Android App
 
-这部分在开发电脑执行，用于没有现成 APK 或希望自己构建时。它不是 VPS 服务端安装步骤。
+这部分在开发电脑执行，用于检查、修改或自行构建 Android App。它不是 VPS 服务端安装步骤。
 
 ### 1. 准备环境
 

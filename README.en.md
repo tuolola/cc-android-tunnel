@@ -17,6 +17,7 @@
 </p>
 
 <p>
+  <a href="https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.1-native/CCtunnel.apk"><img src="https://img.shields.io/badge/APK-1.0.1--native-16a34a?style=for-the-badge" alt="Download the CCtunnel 1.0.1-native public preview APK" /></a>
   <a href="#quick-start"><img src="https://img.shields.io/badge/Setup-VPS%20to%20Android-2563eb?style=for-the-badge" alt="Set up the server, desktop and phone" /></a>
   <a href="#verification"><img src="https://img.shields.io/badge/Verification-Tests%20%26%20Audit-0f766e?style=for-the-badge" alt="Tests and audit" /></a>
   <a href="https://github.com/sun168567/cc-desk-tunnel"><img src="https://img.shields.io/badge/Origin-cc--desk--tunnel-475569?style=for-the-badge" alt="Upstream project" /></a>
@@ -206,9 +207,11 @@ Keep the three credentials separate: **SSH key/password** manages the VPS; **ser
 
 ### 6. Install CCtunnel on Android
 
-Check [this project's Releases](https://github.com/tuolola/cc-android-tunnel/releases) for a published APK. If the desired version has none, use [Build the Android App](#build-the-android-app) below to produce `CCtunnel.apk`. Upstream Windows/macOS/Linux downloads are not phone packages.
+Download [CCtunnel.apk (v1.0.1-native)](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.1-native/CCtunnel.apk) for **Android 7.0 or newer**. This is a **Debug-signed public preview**. Read the [release notes](https://github.com/tuolola/cc-android-tunnel/releases/tag/v1.0.1-native) and download the [SHA256SUMS.txt checksum list](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.1-native/SHA256SUMS.txt).
 
-Transfer an APK from this project's release or your own build to the phone and install it. With USB debugging enabled, you can alternatively run `adb install -r .\artifacts\CCtunnel.apk` on the development computer. Open **CCtunnel** and its connection screen. The phone does not need Node, Docker or Android Studio.
+Verify the SHA-256 checksum, then transfer the APK to the phone and install it. With USB debugging enabled, you can alternatively run `adb install -r .\CCtunnel.apk` from the APK's directory on the development computer. Updating an existing installation requires the same package name and signing key, with a version Android permits as an update. Open **CCtunnel** and its connection screen. The phone does not need Node, Docker or Android Studio.
+
+To build it yourself, see [Build the Android App](#build-the-android-app). Upstream Windows/macOS/Linux downloads are computer packages and cannot be installed on the phone.
 
 ### 7. Connect the phone to the same server
 
