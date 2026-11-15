@@ -17,7 +17,7 @@
 </p>
 
 <p>
-  <a href="https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.2-native/CCtunnel.apk"><img src="https://img.shields.io/badge/APK-1.0.2--native-16a34a?style=for-the-badge" alt="Download the CCtunnel 1.0.2-native public preview APK" /></a>
+  <a href="https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.3-native/CCtunnel.apk"><img src="https://img.shields.io/badge/APK-1.0.3--native-16a34a?style=for-the-badge" alt="Download the CCtunnel 1.0.3-native public preview APK" /></a>
   <a href="#quick-start"><img src="https://img.shields.io/badge/Setup-VPS%20to%20Android-2563eb?style=for-the-badge" alt="Set up the server, desktop and phone" /></a>
   <a href="#verification"><img src="https://img.shields.io/badge/Verification-Tests%20%26%20Audit-0f766e?style=for-the-badge" alt="Tests and audit" /></a>
   <a href="https://github.com/sun168567/cc-desk-tunnel"><img src="https://img.shields.io/badge/Origin-cc--desk--tunnel-475569?style=for-the-badge" alt="Upstream project" /></a>
@@ -25,7 +25,7 @@
 </p>
 
 <p>
-  <img src="https://img.shields.io/badge/Version-1.0.2--native-2563eb?style=flat-square" alt="Version 1.0.2-native" />
+  <img src="https://img.shields.io/badge/Version-1.0.3--native-2563eb?style=flat-square" alt="Version 1.0.3-native" />
   <img src="https://img.shields.io/badge/Kotlin-2.2.10-7f52ff?style=flat-square" alt="Kotlin 2.2.10" />
   <img src="https://img.shields.io/badge/UI-Jetpack%20Compose-4285f4?style=flat-square" alt="Jetpack Compose" />
   <img src="https://img.shields.io/badge/Android-7.0%2B-3ddc84?style=flat-square" alt="Android 7.0 and later" />
@@ -113,7 +113,7 @@ The table describes the native implementation. Server capabilities and permissio
 | Android behavior | Light/dark themes, native multiline editor, keyboard avoidance, scrolling, gestures, disabled and read-only states |
 | Recovery and local state | Retain loaded history during temporary disconnection, recover by durable event cursor, persist service-scoped preferences and protect credentials with Android Keystore |
 
-**App updates (starting with `1.0.2-native`)**: the settings overview offers manual checks, automatic foreground checks, and a prerelease toggle. Automatic checks wait 24 hours after success or one hour after failure. Downloads open in the system browser for user installation. Older `v1.0.1-native` installations do not include this feature; download and install `v1.0.2-native` manually first. See [App updates and release maintenance (Chinese)](./docs/app-updates.md).
+**App updates (starting with `1.0.2-native`)**: the settings overview offers manual checks, automatic foreground checks, and a prerelease toggle. Automatic checks wait 24 hours after success or one hour after failure. Downloads open in the system browser for user installation. Older `v1.0.1-native` installations do not include this feature; download and install the current `v1.0.3-native` version manually first. See [App updates and release maintenance (Chinese)](./docs/app-updates.md).
 
 ## Quick Start
 
@@ -209,14 +209,14 @@ Keep the three credentials separate: **SSH key/password** manages the VPS; **ser
 
 ### 6. Install CCtunnel on Android
 
-Download [CCtunnel.apk (v1.0.2-native)](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.2-native/CCtunnel.apk) for **Android 7.0 or newer**. This is a **Debug-signed public preview** (versionCode 8). Read the [release notes](https://github.com/tuolola/cc-android-tunnel/releases/tag/v1.0.2-native) and download the [SHA256SUMS.txt checksum list](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.2-native/SHA256SUMS.txt).
+Download [CCtunnel.apk (v1.0.3-native)](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.3-native/CCtunnel.apk) for **Android 7.0 or newer**. This is a **Debug-signed public preview** (versionCode 9). Read the [release notes](https://github.com/tuolola/cc-android-tunnel/releases/tag/v1.0.3-native) and download the [SHA256SUMS.txt checksum list](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.3-native/SHA256SUMS.txt).
 
 Verify the SHA-256 checksum, then transfer the APK to the phone and install it. With USB debugging enabled, you can alternatively run `adb install -r .\CCtunnel.apk` from the APK's directory on the development computer. Updating an existing installation requires the same package name and signing key, with a version Android permits as an update. Open **CCtunnel** and its connection screen. The phone does not need Node, Docker or Android Studio.
 
-This APK is **13,563,373 bytes**. Its SHA-256 is:
+This APK is **13,563,377 bytes**. Its SHA-256 is:
 
 ```text
-fcaa59deb34e22370cbf350a7d3a9ff176afc55e8a667d066c0122c67e21e47e
+dac00cd7cdb07a969cbb46f5b54aa2c92da1f56a090708778d590268e7f06cef
 ```
 
 Upgrade from `v1.0.1-native` by downloading this version manually; the older version has no app-update entry point. The signing certificate is unchanged, so uninstalling the old version first is unnecessary.
@@ -324,7 +324,13 @@ Use `scripts/measure-performance.ps1` with the [performance testing guide (Chine
 
 [The native build guard](./gradle/native-boundary.gradle.kts) checks production sources and resolved runtime dependencies. APK assembly also checks DEX references, packaged assets and native libraries for excluded JavaScript engines and WebView rendering. [The Python audit](./scripts/audit-native-apk.py) provides a separate check. The guard permits AndroidX's static `WebView.findAddress` compatibility reference; constructing or rendering a WebView remains rejected.
 
-### Current verification results — 2026-11-14
+### Scroll-fix verification — 2026-11-15
+
+`1.0.3-native` (versionCode 9) fixes flickering and jumping back to the bottom when scrolling through history after opening or switching chats. Scroll observers now bind to the current chat, preserve the reading position and resume following replies after tapping the return-to-latest button.
+
+The Debug APK built successfully and uses the same signing certificate as `1.0.2-native`. This version passed 65 JVM tests and 12 Android 14 emulator tests covering scrolling, long messages, viewport changes and session navigation. Both new regressions failed before the fix and passed afterward. Android Lint reported 0 errors and 40 warnings; the independent APK audit and all 8 audit regression tests passed. The full device suite was not rerun, and physical phones were not verified in this run.
+
+### 1.0.2-native historical verification results — 2026-11-14
 
 | Check | Result for this run |
 | --- | --- |
@@ -335,8 +341,8 @@ Use `scripts/measure-performance.ps1` with the [performance testing guide (Chine
 | Native enforcement | APK native-boundary check and independent APK audit passed |
 | Full Android device suite | 72 total: 68 passed, 4 live-workbench opt-in tests skipped, 0 failed; the live GitHub update check was explicitly enabled |
 | App-update interaction | Checked the real GitHub feed through the normal app entry point on Android 14; verified light/dark themes, both options remaining off after restart, and the empty stable-channel message |
-| Published assets | The `v1.0.2-native` APK and checksum file were downloaded anonymously; APK size and SHA-256 matched the values above |
-| In-app update flow | A build of the current production source with only its version lowered detected the real `v1.0.2-native` release and upgraded through the app's download button, system browser and installer; this test build was not the historical `v1.0.1-native` APK |
+| Published assets | The `v1.0.2-native` APK and checksum file were downloaded anonymously; APK size and SHA-256 matched [that version's checksum list](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.2-native/SHA256SUMS.txt) |
+| In-app update flow | A build of the `1.0.2-native` production source with only its version lowered detected the real `v1.0.2-native` release and upgraded through the app's download button, system browser and installer; this test build was not the historical `v1.0.1-native` APK |
 | Historical APK upgrade | The historical public `v1.0.1-native` APK was updated to `1.0.2-native`/code 8 by opening the browser-downloaded APK in the system file manager; first-install time was retained, and a cold launch restored the workbench connection with both update options enabled |
 | Post-upgrade check | After restoring the original network settings, a manual check reported that no update was needed; login state and both update options were retained |
 

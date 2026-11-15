@@ -1,8 +1,14 @@
 package dev.ccdesk.nativeapp.ui
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.ccdesk.nativeapp.core.*
 import kotlinx.coroutines.runBlocking
@@ -17,8 +23,75 @@ import org.junit.runner.RunWith
 class StreamingScrollTest {
     @get:Rule val compose = createComposeRule()
 
-    private fun event(sequence: Int, payload: org.json.JSONObject) =
-        json("sessionId" to "session-1", "runId" to "earlier-run", "sequence" to sequence, "createdAt" to "2026-11-14T00:00:00Z", "payload" to payload)
+    private fun event(sequence: Int, payload: org.json.JSONObject, sessionId: String = "session-1") =
+        json("sessionId" to sessionId, "runId" to "earlier-run", "sequence" to sequence, "createdAt" to "2026-11-14T00:00:00Z", "payload" to payload)
+
+    @Test fun openingAChatAfterCompositionPreservesTheReadersPosition() {
+        assertReaderPositionAfterOpeningChat(switchFromExistingChat = false)
+    }
+
+    @Test fun switchingChatsPreservesTheReadersPosition() {
+        assertReaderPositionAfterOpeningChat(switchFromExistingChat = true)
+    }
+
+    private fun assertReaderPositionAfterOpeningChat(switchFromExistingChat: Boolean) {
+        val transport = FixtureTransport()
+        val target = if (switchFromExistingChat) "session-2" else "session-1"
+        val targetSession = transport.session(target, "Scroll regression", activeRun = json("id" to "live-run", "status" to "running", "surface" to "chat"))
+        if (switchFromExistingChat) transport.sessions += targetSession else transport.sessions[0] = targetSession
+        val repository = WorkbenchRepository(transport)
+        val bottomInset = mutableIntStateOf(0)
+        try {
+            runBlocking { repository.start() }
+            compose.waitUntil(5_000) { repository.state.value.status == "online" }
+            if (switchFromExistingChat) {
+                transport.events = JSONArray().put(event(1, json("type" to "message.user", "messageId" to "first", "text" to "First session")))
+                runBlocking { repository.selectSession("session-1") }
+            }
+            compose.setContent {
+                Box(Modifier.fillMaxSize().padding(bottom = bottomInset.intValue.dp)) { WorkbenchApp(repository) }
+            }
+            // Let the original chat's scroll observers start before replacing the session.
+            compose.waitForIdle()
+            transport.events = JSONArray().apply {
+                for (i in 1..40) {
+                    put(event(i * 2 - 1, json("type" to "message.user", "messageId" to "question-$i", "text" to "Earlier question $i"), target))
+                    put(event(i * 2, json("type" to "text.delta", "messageId" to "answer-$i", "text" to "Earlier answer $i has a short, separately measured transcript row."), target))
+                }
+            }
+            runBlocking { repository.selectSession(target) }
+            compose.waitForIdle()
+            fun chunk(i: Int) = transport.fragment(target, "live-run", json("type" to "text.delta", "messageId" to "live", "text" to "New streamed paragraph $i.\n\n"))
+            chunk(1)
+            compose.waitForIdle()
+            compose.onNodeWithContentDescription("回到最新消息").assertDoesNotExist()
+            val transcript = compose.onNode(hasScrollToIndexAction())
+            fun position() = transcript.fetchSemanticsNode().config[SemanticsProperties.VerticalScrollAxisRange].value()
+            val end = position()
+            // Multiple short rows re-enter the lazy list and report their first measurement.
+            // Those layout callbacks must not look like a reason to return to the latest reply.
+            transcript.performTouchInput { swipeDown(startY = height * .2f, endY = height * .8f, durationMillis = 700) }
+            compose.waitForIdle()
+            compose.onNodeWithContentDescription("回到最新消息").assertIsDisplayed()
+            val anchored = position()
+            assertTrue("The gesture must reveal earlier rows", anchored < end)
+            for (i in 2..8) {
+                chunk(i)
+                compose.waitForIdle()
+                assertEquals("Streaming after opening $target must retain the reading position", anchored, position(), .0001f)
+            }
+            compose.runOnIdle { bottomInset.intValue = 80 }
+            compose.waitForIdle()
+            assertEquals("Resizing after opening $target must retain the reading position", anchored, position(), .0001f)
+            compose.onNodeWithContentDescription("回到最新消息").assertIsDisplayed().performClick()
+            compose.waitForIdle()
+            chunk(9)
+            compose.waitForIdle()
+            compose.onNodeWithContentDescription("回到最新消息").assertDoesNotExist()
+            assertEquals("Scrolling must not reload the conversation", 1, transport.sentOf("session.subscribe").count { it.optString("sessionId") == target })
+            assertTrue("Scrolling must not request older pages", transport.sentOf("session.history").isEmpty())
+        } finally { compose.runOnIdle { repository.dispose() } }
+    }
 
     @Test fun readerWhoScrolledAwayStaysPutWhileTheReplyStreams() {
         val transport = FixtureTransport()

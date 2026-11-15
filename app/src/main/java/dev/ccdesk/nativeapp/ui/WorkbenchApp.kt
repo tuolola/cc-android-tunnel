@@ -228,15 +228,17 @@ private val baselineFadeEasing=Easing{if(it<.5f)2*it*it else 1-(-2*it+2)*(-2*it+
         else{withFrameNanos{};val again=list.layoutInfo;again.visibleItemsInfo.lastOrNull{it.index==target}?.let{list.scrollBy((it.offset+it.size-again.viewportEndOffset).coerceAtLeast(0).toFloat())}}
         following=true
     }
-    LaunchedEffect(list){snapshotFlow{Triple(list.isScrollInProgress,list.firstVisibleItemIndex,list.firstVisibleItemScrollOffset)}.collect{if(it.first)following=nearEnd}}
+    // following is recreated for each session; restart observers so they read and update
+    // that session's state instead of retaining the previously opened chat's state.
+    LaunchedEffect(list,session.id){snapshotFlow{Triple(list.isScrollInProgress,list.firstVisibleItemIndex,list.firstVisibleItemScrollOffset)}.collect{if(it.first)following=nearEnd}}
     // Match maintainScrollAtEnd.onLayout for IME and composer-height changes, without moving a reader who scrolled away.
-    LaunchedEffect(list){snapshotFlow{list.layoutInfo.viewportSize.height}.collect{if(it>0&&following)scrollToEnd()}}
-    LaunchedEffect(rowLayoutVersion){if(following)scrollToEnd()}
+    LaunchedEffect(list,session.id){snapshotFlow{list.layoutInfo.viewportSize.height}.collect{if(it>0&&following)scrollToEnd()}}
+    LaunchedEffect(session.id,rowLayoutVersion){if(following)scrollToEnd()}
     val rows=projection.rows
     val word=if(search)query.trim().lowercase()else "";val hits=if(word.isEmpty())emptyList()else rows.indices.filter{rows[it].searchable().lowercase().contains(word)};val focus=hits.getOrNull(match.coerceAtMost((hits.size-1).coerceAtLeast(0)))
     var searchedPage by remember(session.id){mutableStateOf("")}
-    LaunchedEffect(rows.size,history?.fragments,history?.events?.size){if(rows.isNotEmpty()&&(initial||following)){scrollToEnd();initial=false}}
-    LaunchedEffect(focus){if(focus!=null){following=false;list.animateScrollToItem(focus+(if(history?.hasEarlier==true&&online)1 else 0),scrollOffset=-(list.layoutInfo.viewportSize.height*.3f).toInt())}}
+    LaunchedEffect(session.id,rows.size,history?.fragments,history?.events?.size){if(rows.isNotEmpty()&&(initial||following)){scrollToEnd();initial=false}}
+    LaunchedEffect(session.id,focus){if(focus!=null){following=false;list.animateScrollToItem(focus+(if(history?.hasEarlier==true&&online)1 else 0),scrollOffset=-(list.layoutInfo.viewportSize.height*.3f).toInt())}}
     LaunchedEffect(word,history?.events?.firstOrNull()?.sequence,history?.loading){val cursor="$word/${history?.events?.firstOrNull()?.sequence}";if(word.isNotEmpty()&&hits.isEmpty()&&online&&history?.hasEarlier==true&&!history.loading&&searchedPage!=cursor){delay(280);searchedPage=cursor;try{repo.loadEarlier(session.id)}catch(e:Exception){error=e.message.orEmpty()}}}
     suspend fun send(type:String,fields:JSONObject=JSONObject()):Boolean {if(readOnly||busy)return false;busy=true;error="";return try {val id=ensureSession();if(type=="message.send"&&draftChosen&&(session.id.isEmpty()||id==firstTarget)){repo.configureModel(id,draftModel,draftEffort);draftChosen=false};fields.put("sessionId",id);repo.command(type,fields);true}catch(e:Exception){error=e.message.orEmpty();false}finally{busy=false}}
     val command:(String,JSONObject)->Unit={type,fields->scope.launch{send(type,fields)}}

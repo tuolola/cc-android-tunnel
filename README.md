@@ -17,7 +17,7 @@
 </p>
 
 <p>
-  <a href="https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.2-native/CCtunnel.apk"><img src="https://img.shields.io/badge/APK-1.0.2--native-16a34a?style=for-the-badge" alt="下载 CCtunnel 1.0.2-native 公开测试版 APK" /></a>
+  <a href="https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.3-native/CCtunnel.apk"><img src="https://img.shields.io/badge/APK-1.0.3--native-16a34a?style=for-the-badge" alt="下载 CCtunnel 1.0.3-native 公开测试版 APK" /></a>
   <a href="#快速开始"><img src="https://img.shields.io/badge/使用教程-从服务器到手机-2563eb?style=for-the-badge" alt="从零开始使用" /></a>
   <a href="#验证与验收"><img src="https://img.shields.io/badge/验证-测试与审计-0f766e?style=for-the-badge" alt="测试与审计" /></a>
   <a href="https://github.com/sun168567/cc-desk-tunnel"><img src="https://img.shields.io/badge/项目来源-cc--desk--tunnel-475569?style=for-the-badge" alt="上游项目" /></a>
@@ -25,7 +25,7 @@
 </p>
 
 <p>
-  <img src="https://img.shields.io/badge/版本-1.0.2--native-2563eb?style=flat-square" alt="版本 1.0.2-native" />
+  <img src="https://img.shields.io/badge/版本-1.0.3--native-2563eb?style=flat-square" alt="版本 1.0.3-native" />
   <img src="https://img.shields.io/badge/Kotlin-2.2.10-7f52ff?style=flat-square" alt="Kotlin 2.2.10" />
   <img src="https://img.shields.io/badge/UI-Jetpack%20Compose-4285f4?style=flat-square" alt="Jetpack Compose" />
   <img src="https://img.shields.io/badge/Android-7.0%2B-3ddc84?style=flat-square" alt="Android 7.0 及以上" />
@@ -116,7 +116,7 @@ flowchart LR
 | Android 体验 | 浅色与深色主题、原生多行输入框、键盘避让、滚动、手势、禁用与只读状态 |
 | 恢复与本地状态 | 临时断线时保留已加载历史，按持久事件游标恢复；保存服务范围内的偏好，通过 Android Keystore 保护凭据 |
 
-**App 更新（`1.0.2-native` 起）**：设置概览支持手动检查、前台自动检查和测试版渠道选择；自动检查成功后间隔 24 小时，失败后 1 小时再试。下载交给系统浏览器，由用户安装。旧版 `v1.0.1-native` 不含此功能，需要先手动下载安装 `v1.0.2-native`。详见 [App 更新与版本发布](./docs/app-updates.md)。
+**App 更新（`1.0.2-native` 起）**：设置概览支持手动检查、前台自动检查和测试版渠道选择；自动检查成功后间隔 24 小时，失败后 1 小时再试。下载交给系统浏览器，由用户安装。旧版 `v1.0.1-native` 不含此功能，需要先手动下载安装当前版本 `v1.0.3-native`。详见 [App 更新与版本发布](./docs/app-updates.md)。
 
 ## 快速开始
 
@@ -250,14 +250,14 @@ sudo cc-desk-tunnel summary
 
 **操作位置：Android 手机；需要自行构建时在开发电脑操作。**
 
-1. [直接下载 CCtunnel.apk（v1.0.2-native）](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.2-native/CCtunnel.apk)。适用于 **Android 7.0 及以上**，当前为 **Debug 签名的公开测试版**（versionCode 8）。查看[版本发布说明](https://github.com/tuolola/cc-android-tunnel/releases/tag/v1.0.2-native)和 [SHA256SUMS.txt 校验清单](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.2-native/SHA256SUMS.txt)。
+1. [直接下载 CCtunnel.apk（v1.0.3-native）](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.3-native/CCtunnel.apk)。适用于 **Android 7.0 及以上**，当前为 **Debug 签名的公开测试版**（versionCode 9）。查看[版本发布说明](https://github.com/tuolola/cc-android-tunnel/releases/tag/v1.0.3-native)和 [SHA256SUMS.txt 校验清单](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.3-native/SHA256SUMS.txt)。
 2. 核对 SHA-256 后将 APK 传到手机安装。也可以连接 USB 调试，在 APK 所在目录执行 `adb install -r .\CCtunnel.apk`。已有应用须同包名、同签名且版本允许更新，才能覆盖安装。
 3. 打开手机上的 **CCtunnel**。手机只需安装 APK；Node、Docker、Android Studio 均不需要安装到手机。
 
-本版 APK 大小为 **13,563,373 字节**，SHA-256 为：
+本版 APK 大小为 **13,563,377 字节**，SHA-256 为：
 
 ```text
-fcaa59deb34e22370cbf350a7d3a9ff176afc55e8a667d066c0122c67e21e47e
+dac00cd7cdb07a969cbb46f5b54aa2c92da1f56a090708778d590268e7f06cef
 ```
 
 从 `v1.0.1-native` 升级需手动下载本版；旧版没有 App 更新入口。本版沿用相同签名，不需要先卸载旧版。
@@ -386,7 +386,13 @@ python -B scripts/audit-native-apk.py app/build/outputs/apk/debug/app-debug.apk 
 
 [原生构建检查](./gradle/native-boundary.gradle.kts) 会检查生产源码及已解析的运行时依赖；APK 构建还会检查 DEX 引用、打包资源和原生库，拒绝受限的 JavaScript 引擎及 WebView 渲染。[Python 审计](./scripts/audit-native-apk.py) 提供独立复核。检查允许 AndroidX 的静态 `WebView.findAddress` 兼容引用，仍会拒绝创建或渲染 WebView。
 
-### 当前验证结果 — 2026-11-14
+### 滚动修复验证 — 2026-11-15
+
+`1.0.3-native`（versionCode 9）修复首次打开或切换会话后，上滑查看历史消息时闪动并自动回到底部的问题。滚动监听随当前会话重新绑定，阅读历史时保留位置，点击“回到最新消息”后继续跟随回复。
+
+Debug APK 已构建，签名证书与 `1.0.2-native` 相同。本版通过 65 项 JVM 测试和 Android 14 模拟器上 12 项滚动、长消息、视口变化与会话导航测试；新增两项回归均在修复前失败、修复后通过。Android Lint 为 0 个错误、40 条警告；独立 APK 审计与 8 项审计回归通过。本次未重跑完整设备套件，未完成实体手机验证。
+
+### 1.0.2-native 历史验证结果 — 2026-11-14
 
 | 检查 | 本轮结果 |
 | --- | --- |
@@ -397,8 +403,8 @@ python -B scripts/audit-native-apk.py app/build/outputs/apk/debug/app-debug.apk 
 | 原生约束 | APK 原生边界检查与独立 APK 审计通过 |
 | 完整 Android 设备套件 | 共 72 项：68 项通过、4 项工作台真实服务 opt-in 测试跳过、0 项失败；本轮已显式启用真实 GitHub 更新检查 |
 | App 更新实际操作 | Android 14 模拟器上通过正式入口检查真实 GitHub 发布，验证浅/深色主题、关闭两个选项后的重启持久化及正式渠道暂无可安装版本提示 |
-| 发布附件 | `v1.0.2-native` APK 与校验文件可匿名下载，下载 APK 的大小及 SHA-256 与上方信息一致 |
-| App 内更新链路 | 仅降低版本号的当前生产源码验收包检测到真实 `v1.0.2-native`，经 App 下载按钮、系统浏览器和系统安装器完成升级；该验收包不是历史发布的 `v1.0.1-native` |
+| 发布附件 | `v1.0.2-native` APK 与校验文件可匿名下载，下载 APK 的大小及 SHA-256 与[该版本校验清单](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.2-native/SHA256SUMS.txt)一致 |
+| App 内更新链路 | 仅降低版本号的 `1.0.2-native` 生产源码验收包检测到真实 `v1.0.2-native`，经 App 下载按钮、系统浏览器和系统安装器完成升级；该验收包不是历史发布的 `v1.0.1-native` |
 | 历史旧版覆盖升级 | 历史公开 `v1.0.1-native` 经系统文件管理器打开浏览器下载的新版 APK，系统覆盖安装为 `1.0.2-native`/code 8，首次安装时间保留；冷启动后工作台连接恢复，两个更新选项保持开启 |
 | 升级后复验 | 恢复原网络设置后手动检查显示“当前版本无需更新”，登录状态及两个更新选项保留 |
 

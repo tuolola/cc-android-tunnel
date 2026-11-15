@@ -2,10 +2,10 @@
 
 App 更新从 **`1.0.2-native`（versionCode 8）**开始提供。旧版 `v1.0.1-native` APK 没有更新检查功能，需要先手动安装本版；仅更新 GitHub 仓库不会给旧 APK 增加功能。
 
-本版为 Android 7.0 及以上的 **Debug 签名公开测试版**：[下载 CCtunnel.apk](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.2-native/CCtunnel.apk) · [发布说明](https://github.com/tuolola/cc-android-tunnel/releases/tag/v1.0.2-native) · [SHA256SUMS.txt](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.2-native/SHA256SUMS.txt)。APK 大小为 **13,563,373 字节**，SHA-256：
+当前版本 **`1.0.3-native`（versionCode 9）**为 Android 7.0 及以上的 **Debug 签名公开测试版**：[下载 CCtunnel.apk](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.3-native/CCtunnel.apk) · [发布说明](https://github.com/tuolola/cc-android-tunnel/releases/tag/v1.0.3-native) · [SHA256SUMS.txt](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.3-native/SHA256SUMS.txt)。APK 大小为 **13,563,377 字节**，SHA-256：
 
 ```text
-fcaa59deb34e22370cbf350a7d3a9ff176afc55e8a667d066c0122c67e21e47e
+dac00cd7cdb07a969cbb46f5b54aa2c92da1f56a090708778d590268e7f06cef
 ```
 
 ## 在 App 中使用
@@ -24,7 +24,7 @@ fcaa59deb34e22370cbf350a7d3a9ff176afc55e8a667d066c0122c67e21e47e
 Get-FileHash .\CCtunnel.apk -Algorithm SHA256
 ```
 
-覆盖安装需要相同包名、相同签名以及更高的 Android `versionCode`。旧版 `v1.0.1-native` 是 Debug 签名测试包；本版 `1.0.2-native`（versionCode 8）Debug APK 已核对使用相同签名，不需要先卸载旧版。后续 APK 也必须保持相同签名才能覆盖现有安装，单独更改版本名称不能解决签名不一致。
+覆盖安装需要相同包名、相同签名以及更高的 Android `versionCode`。本版 `1.0.3-native`（versionCode 9）与 `1.0.2-native` Debug APK 已核对使用相同签名证书，证书 SHA-256 均为 `eaac7685189a81114415665d17e1ce4e3e4fa1154ae1c03470ff430a192f025b`；`1.0.2-native` 此前也已核对与 `v1.0.1-native` 签名一致，不需要先卸载旧版。后续 APK 也必须保持相同签名才能覆盖现有安装，单独更改版本名称不能解决签名不一致。
 
 ## 检查来源与版本规则
 
@@ -47,15 +47,25 @@ App 版本按 SemVer 比较，不按发布时间或字符串字典序判断：�
 
 ## 验收与复现
 
+### 1.0.3-native 滚动修复 — 2026-11-15
+
+首次打开或切换会话后，旧滚动监听仍引用上一会话的跟随状态，导致上滑查看历史时，消息重新布局会触发回到底部。本版让滚动相关协程随当前会话重新绑定，保留阅读位置及返回最新消息后的跟随行为。
+
+本版 Debug APK 已构建，版本为 `1.0.3-native`（versionCode 9），大小与哈希见本文开头。本版通过 65 项 JVM 测试与 Android 14 模拟器上 12 项滚动、长消息、视口变化和会话导航测试。新增的首次打开会话、切换会话两项回归在修复前均失败、修复后均通过；测试还核对流式更新不抢阅读位置，点击返回最新消息后恢复跟随，滚动不重新请求历史。Android Lint 为 0 个错误、40 条警告；独立 APK 审计与 8 项审计回归通过。
+
+本轮未重跑完整设备套件，未完成实体手机验证。下方 `1.0.2-native` 的发布后下载与升级验收为历史记录，不作为本版发布后验证结果。
+
+### 1.0.2-native 历史验收 — 2026-11-14
+
 截至 2026-11-14，`1.0.2-native` 已独立构建，65 项 JVM 测试通过（包含 17 项更新逻辑测试），8 项 APK 审计回归通过，原生边界与独立 APK 审计通过；Android Lint 为 0 个错误、40 条警告。完整 Android 设备套件共 72 项：**68 项通过、4 项跳过、0 项失败**，其中包含下方 7 项更新设备测试。
 
 本轮显式启用了公开 GitHub 更新检查。跳过的是工作台真实服务测试 `LiveWorkbenchAcceptanceTest`、`LiveSessionRecoveryTest`、`RealToolAcceptanceTest`、`RealNetworkRecoveryTest`；它们不计作聊天、会话恢复、工具或断网恢复流程验收通过。
 
 发布前已在 Android 14 模拟器的实际 `MainActivity` 中进入设置并检查真实 GitHub 发布源，验证浅色/深色主题、关闭两个更新选项后重启仍保持关闭，以及关闭测试版渠道后显示“当前渠道暂无可安装版本”。检查当时公开 Release 只有 `v1.0.1-native` 测试版，安装的 `1.0.2-native` 比它新；因此“当前版本无需更新”是当时的正确结果，不是发现了线上新版。
 
-`v1.0.2-native` 发布后，匿名下载的 APK 与 `SHA256SUMS.txt` 已核对一致；APK 大小为 13,563,373 字节，SHA-256 为本文开头的 `fcaa59…e47e`。Android 14 模拟器另完成两条独立升级链路：
+`v1.0.2-native` 发布后，匿名下载的 APK 与 `SHA256SUMS.txt` 已核对一致；APK 大小为 13,563,373 字节，SHA-256 为 `fcaa59deb34e22370cbf350a7d3a9ff176afc55e8a667d066c0122c67e21e47e`。Android 14 模拟器另完成两条独立升级链路：
 
-1. **App 更新入口到系统安装器**：使用与本版相同生产源码、仅将版本改为 `1.0.1-native`/code 7 的验收包，实际检查 GitHub 并发现公开 `v1.0.2-native`。点击 App“下载 APK”后，由系统浏览器下载至系统下载目录，再经系统安装器确认更新；结果为 `1.0.2-native`/code 8，安装后的 `base.apk` SHA-256 仍为公开 APK 的哈希，首次安装时间保留。这个低版本验收包**不是历史公开的 `v1.0.1-native` APK**，用于验证已经具备更新功能的客户端如何发现并安装新版本。
+1. **App 更新入口到系统安装器**：使用与 `1.0.2-native` 相同生产源码、仅将版本改为 `1.0.1-native`/code 7 的验收包，实际检查 GitHub 并发现公开 `v1.0.2-native`。点击 App“下载 APK”后，由系统浏览器下载至系统下载目录，再经系统安装器确认更新；结果为 `1.0.2-native`/code 8，安装后的 `base.apk` SHA-256 仍为公开 APK 的哈希，首次安装时间保留。这个低版本验收包**不是历史公开的 `v1.0.1-native` APK**，用于验证已经具备更新功能的客户端如何发现并安装新版本。
 2. **历史公开旧版手动覆盖安装**：安装实际公开的 `v1.0.1-native` APK（code 7，SHA-256 `1a4025901d1b37274f6ea12ff28517f6d3c4a73a78e95b03b01b1cc82464535b`），通过系统文件管理器打开前述浏览器下载的公开新版 APK，经系统更新确认后成功安装为 `1.0.2-native`/code 8。系统记录的安装器为 `com.android.packageinstaller`，首次安装时间保留；冷启动后工作台显示已连接，两个更新选项保持开启。旧版没有 App 更新入口，因此这条链路从手动打开安装包开始。
 
 恢复原网络设置后，在真实安装的 `1.0.2-native` 中再次手动检查，显示“当前版本无需更新”；工作台登录状态保留，两个更新选项仍为开启。这样将发布源检查、实际安装结果和升级后的应用状态分别核实。
