@@ -93,7 +93,7 @@ class NativeComposerTest {
         compose.runOnIdle{val view=nativeEditor();assertSame(previous,view);assertEquals(2,view.selectionStart);assertEquals(4,view.selectionEnd);assertEquals(1,BaseInputConnection.getComposingSpanStart(view.text));assertEquals(5,BaseInputConnection.getComposingSpanEnd(view.text));view.onCreateInputConnection(EditorInfo())?.finishComposingText()}
     }
 
-    @Test fun hotThemeChangeRefreshesDefaultHintWithoutReplacingEditorOrImeComposition(){
+    @Test fun hotThemeChangeRefreshesReferenceHintWithoutReplacingEditorOrImeComposition(){
         val application=InstrumentationRegistry.getInstrumentation().targetContext
         fun themed(night:Int):Pair<Configuration,Context>{
             val config=Configuration(application.resources.configuration).apply{
@@ -114,23 +114,20 @@ class NativeComposerTest {
             }
         }
         lateinit var original:EditText
-        lateinit var lightHints:android.content.res.ColorStateList
-        lateinit var darkHints:android.content.res.ColorStateList
+        val lightHint=0xff8f8f8f.toInt()
+        val darkHint=0xffa3a3a3.toInt()
         compose.runOnIdle{
-            // Independent, uncustomized Android widgets supply the system's expected state lists.
-            lightHints=AppCompatEditText(light.second).hintTextColors
-            darkHints=AppCompatEditText(dark.second).hintTextColors
-            assertNotEquals("The fixture must exercise different system hint palettes",lightHints.defaultColor,darkHints.defaultColor)
+            // The measured UI palette must update on the existing native editor.
             original=nativeEditor()
             assertTrue(original.text.isEmpty())
-            assertEquals(lightHints.getColorForState(original.drawableState,lightHints.defaultColor),original.currentHintTextColor)
+            assertEquals(lightHint,original.currentHintTextColor)
             useDark.value=true
         }
         compose.runOnIdle{
             val view=nativeEditor()
             assertSame("A theme switch must not recreate the editor",original,view)
             assertTrue(view.text.isEmpty())
-            assertEquals(darkHints.getColorForState(view.drawableState,darkHints.defaultColor),view.currentHintTextColor)
+            assertEquals(darkHint,view.currentHintTextColor)
             view.requestFocus();view.setText("Draft composing text")
             assertTrue(view.onCreateInputConnection(EditorInfo())!!.setComposingRegion(1,7))
             view.setSelection(2,5)
@@ -146,13 +143,13 @@ class NativeComposerTest {
             assertEquals(1,BaseInputConnection.getComposingSpanStart(view.text))
             assertEquals(7,BaseInputConnection.getComposingSpanEnd(view.text))
             assertEquals("Changing hint colors must not emit text edits",changesBeforeSwitch,changes.size)
-            assertEquals(lightHints.getColorForState(view.drawableState,lightHints.defaultColor),view.currentHintTextColor)
+            assertEquals(lightHint,view.currentHintTextColor)
             enabled.value=false
         }
         compose.runOnIdle{
             val view=nativeEditor()
             assertFalse(view.isEnabled)
-            assertEquals(lightHints.getColorForState(view.drawableState,lightHints.defaultColor),view.currentHintTextColor)
+            assertEquals(lightHint,view.currentHintTextColor)
             view.onCreateInputConnection(EditorInfo())?.finishComposingText()
         }
     }
@@ -190,21 +187,20 @@ class NativeComposerTest {
     private class ReadOnlyTransport:WorkbenchTransport {
         val sent=CopyOnWriteArrayList<JSONObject>();private val main=Handler(Looper.getMainLooper())
         private fun session()=json("id" to "read-only","title" to "Offline device fixture","projectPath" to "/fixture","permissionMode" to "default","device" to json("id" to "offline-device","name" to "Unavailable device"),"activeRun" to JSONObject.NULL)
-        override suspend fun getEndpoint()="https://fixture.invalid/"
+        override suspend fun getEndpoint()="wss://fixture.invalid/ws"
         override suspend fun setEndpoint(endpoint:String){}
         override suspend fun readPreferences(endpoint:String)=Preferences()
         override suspend fun writePreferences(endpoint:String,preferences:Preferences){}
-        override suspend fun credential(endpoint:String)=""
+        override suspend fun credential(endpoint:String)= "fixture-service-token-0123456789"
         override suspend fun saveCredential(endpoint:String,credential:String){}
         override suspend fun deviceId()="composer-fixture"
         override suspend fun fingerprint(endpoint:String)=""
         override suspend fun setFingerprint(endpoint:String,fingerprint:String){}
         override suspend fun clearOrigin(endpoint:String){}
-        override suspend fun clearBrowserSession(endpoint:String){}
-        override suspend fun http(endpoint:String,route:String,body:JSONObject?)=json("authenticated" to true,"session" to json("id" to "test-browser"))
-        override suspend fun socket(endpoint:String,direct:Boolean,observer:SocketObserver):SocketConnection {
+
+        override suspend fun socket(endpoint:String,observer:SocketObserver):SocketConnection {
             fun frame(value:JSONObject){main.post{observer.message(value.toString())}}
-            main.post{observer.opened();frame(json("type" to "ready","protocolVersion" to 25,"sessions" to JSONArray().put(session()),"browser" to json("sessionId" to "test-browser","serverDeviceId" to "server")))}
+            main.post{observer.opened();frame(json("type" to "ready","protocolVersion" to 25,"sessions" to JSONArray().put(session())));frame(json("type" to "devices","devices" to JSONArray().put(json("id" to "server","server" to true,"ready" to true))))}
             return object:SocketConnection{
                 override fun send(text:String):Boolean {val request=JSONObject(text);sent+=request;val id=request.optString("requestId");if(id.isNotEmpty()){if(request.optString("type")=="session.subscribe")frame(json("type" to "session.snapshot","requestId" to id,"session" to session(),"mode" to "replace","events" to JSONArray(),"hasEarlier" to false));frame(json("type" to "response","requestId" to id,"ok" to true))};return true}
                 override fun close(){}

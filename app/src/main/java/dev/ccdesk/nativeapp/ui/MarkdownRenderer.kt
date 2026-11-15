@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
@@ -99,19 +100,18 @@ private fun Node.children():List<Node> = buildList{var child=firstChild;while(ch
     val c=LocalDeskColors.current
     when(node){
         is Paragraph->MarkdownInline(node,renderer,Modifier.fillMaxWidth().padding(vertical=if(inList)0.dp else 8.dp))
-        is Heading->MarkdownInline(node,renderer,Modifier.fillMaxWidth(),weight=if(node.level<=2)700 else 600,lineHeight=if(node.level==2)28 else 22)
+        is Heading->MarkdownInline(node,renderer,Modifier.fillMaxWidth().padding(top=16.dp,bottom=8.dp),weight=600,size=when(node.level){1->24;2->22;3->20;else->18},lineHeight=when(node.level){1->32;2->30;3->28;else->26})
         is FencedCodeBlock->MarkdownCode(node.literal.trimEnd('\n'),node.info.substringBefore(' '))
         is IndentedCodeBlock->MarkdownCode(node.literal.trimEnd('\n'),"")
-        is BlockQuote->Row(Modifier.fillMaxWidth().padding(vertical=8.dp).background(c.muted)){
-            // Border occupies layout width, as on Android React Native; 8 dp padding follows it.
-            Column(Modifier.fillMaxWidth().drawBehind{drawRect(c.border,size=androidx.compose.ui.geometry.Size(4.dp.toPx(),size.height))}.padding(start=12.dp,end=8.dp)){MarkdownChildren(node,renderer,inList)}
+        is BlockQuote->Row(Modifier.fillMaxWidth().padding(vertical=8.dp)){
+            Column(Modifier.fillMaxWidth().drawBehind{drawRect(c.border,size=androidx.compose.ui.geometry.Size(3.dp.toPx(),size.height))}.padding(start=16.dp,end=8.dp)){MarkdownChildren(node,renderer,inList)}
         }
         is OrderedList, is BulletList->{
             val ordered=node is OrderedList;val start=(node as? OrderedList)?.startNumber?:1
             Column(Modifier.fillMaxWidth()){
                 node.children().forEachIndexed{i,item->
-                    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(16.dp)){
-                        NativeSpanText(if(ordered)"${start+i}." else "•",Modifier.alignByBaseline(),size=if(ordered)16 else 18,lineHeight=null,monospace=ordered,weight=if(ordered)400 else 900,color=c.mutedForeground)
+                    Row(Modifier.fillMaxWidth().padding(vertical=4.dp),horizontalArrangement=Arrangement.spacedBy(12.dp)){
+                        NativeSpanText(if(ordered)"${start+i}." else "•",Modifier.alignByBaseline(),size=16,lineHeight=24,weight=400,color=c.foreground)
                         Column(Modifier.weight(1f).alignByBaseline()){MarkdownChildren(item,renderer,true)}
                     }
                 }
@@ -125,19 +125,19 @@ private fun Node.children():List<Node> = buildList{var child=firstChild;while(ch
     }
 }
 
-@Composable private fun MarkdownInline(node:Node,renderer:Markwon,modifier:Modifier=Modifier,weight:Int=400,lineHeight:Int=22){
+@Composable private fun MarkdownInline(node:Node,renderer:Markwon,modifier:Modifier=Modifier,weight:Int=400,lineHeight:Int=24,size:Int=16){
     val spans=remember(node,renderer){SpannableStringBuilder().apply{node.children().forEach{append(renderer.render(it))}}}
     val images=remember(spans){spans.getSpans(0,spans.length,AsyncDrawableSpan::class.java).sortedBy{spans.getSpanStart(it)}}
-    if(images.isEmpty())NativeSpanText(spans,modifier,weight=weight,lineHeight=lineHeight,renderer=renderer)
+    if(images.isEmpty())NativeSpanText(spans,modifier,size=size,weight=weight,lineHeight=lineHeight,renderer=renderer)
     else Column(modifier){
         var start=0
         images.forEach{image->
             val at=spans.getSpanStart(image);val end=spans.getSpanEnd(image)
-            if(at>start){val text=spans.subSequence(start,at).trim('\n');if(text.isNotEmpty())NativeSpanText(text,weight=weight,lineHeight=lineHeight,renderer=renderer)}
+            if(at>start){val text=spans.subSequence(start,at).trim('\n');if(text.isNotEmpty())NativeSpanText(text,size=size,weight=weight,lineHeight=lineHeight,renderer=renderer)}
             MarkdownImage(image.drawable.destination,spans.subSequence(at,end).toString(),spans.getSpans(at,end,android.text.style.ClickableSpan::class.java).firstOrNull())
             start=end
         }
-        if(start<spans.length){val text=spans.subSequence(start,spans.length).trim('\n');if(text.isNotEmpty())NativeSpanText(text,weight=weight,lineHeight=lineHeight,renderer=renderer)}
+        if(start<spans.length){val text=spans.subSequence(start,spans.length).trim('\n');if(text.isNotEmpty())NativeSpanText(text,size=size,weight=weight,lineHeight=lineHeight,renderer=renderer)}
     }
 }
 
@@ -179,8 +179,14 @@ private object NativeMarkdownImages {
 
 @Composable private fun MarkdownCode(code:String,language:String){
     val c=LocalDeskColors.current;val highlighted=remember(code,language,c.dark){highlightCode(code,language,c.dark)}
-    Box(Modifier.fillMaxWidth().padding(vertical=4.dp).clip(RoundedCornerShape(8.dp)).background(if(c.dark)Color(0xff1a1a1a)else Color(0xfff6f8fa)).horizontalScroll(rememberScrollState()).padding(12.dp)){
-        NativeSpanText(highlighted,size=14,lineHeight=20,monospace=true,color=if(c.dark)Color(0xfff8f8f8)else Color(0xff333333))
+    Column(Modifier.fillMaxWidth().padding(vertical=8.dp).clip(RoundedCornerShape(16.dp)).background(c.secondary)){
+        Row(Modifier.fillMaxWidth().padding(start=16.dp,end=6.dp,top=4.dp,bottom=4.dp),verticalAlignment=Alignment.CenterVertically){
+            NativeSpanText(language.ifBlank{"代码"},Modifier.weight(1f),size=12,lineHeight=18,color=c.mutedForeground,selectable=false)
+            MessageCopyAction(code,"复制代码")
+        }
+        Box(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(start=16.dp,end=16.dp,bottom=16.dp)){
+            NativeSpanText(highlighted,size=14,lineHeight=22,monospace=true,color=c.foreground)
+        }
     }
 }
 

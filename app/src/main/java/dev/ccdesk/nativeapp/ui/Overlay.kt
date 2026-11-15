@@ -21,6 +21,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -59,6 +60,61 @@ val LocalOverlayHost = staticCompositionLocalOf<OverlayHostState?> { null }
     }
 }
 @Composable private fun OverlayLayerContent(layer: OverlayLayer) { layer.content() }
+
+/** A floating menu anchored to a screen corner, with a clear outside-tap target. */
+@Composable internal fun DeskAnchoredOverlay(
+    visible: Boolean,
+    onDismissRequest: () -> Unit,
+    alignment: Alignment = Alignment.TopEnd,
+    width: Dp = 216.dp,
+    corner: Dp = 24.dp,
+    margin: PaddingValues = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val opacity = remember { Animatable(0f) }
+    val scale = remember { Animatable(.8f) }
+    var present by remember { mutableStateOf(visible) }
+    LaunchedEffect(visible) {
+        if (visible) {
+            present = true
+            launch { opacity.animateTo(1f, DeskMotion.menuFadeIn()) }
+            scale.animateTo(1f, DeskMotion.menu())
+        } else if (present) {
+            val fade = launch { opacity.animateTo(0f, DeskMotion.menuFadeOut()) }
+            scale.animateTo(.94f, DeskMotion.menu())
+            fade.join()
+            present = false
+            scale.snapTo(.8f)
+        }
+    }
+    if (!visible && !present) return
+    val dismiss = rememberUpdatedState(onDismissRequest)
+    val origin = when (alignment) {
+        Alignment.BottomStart -> TransformOrigin(0f, 1f)
+        Alignment.BottomEnd -> TransformOrigin(1f, 1f)
+        Alignment.TopStart -> TransformOrigin(0f, 0f)
+        else -> TransformOrigin(1f, 0f)
+    }
+    Portal(modal = visible) {
+        BackHandler(enabled = visible, onBack = onDismissRequest)
+        Box(Modifier.fillMaxSize()) {
+            Box(Modifier.fillMaxSize().then(if (visible) Modifier
+                .pointerInput(Unit) { detectTapGestures { dismiss.value() } }
+                .semantics { contentDescription = "关闭菜单"; role = Role.Button; onClick { dismiss.value(); true } }
+            else Modifier))
+            Box(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding().padding(margin), contentAlignment = alignment) {
+                val shape = RoundedCornerShape(corner)
+                Column(Modifier.widthIn(max = width).fillMaxWidth().floatingAlpha { opacity.value }.graphicsLayer {
+                    scaleX = scale.value
+                    scaleY = scale.value
+                    transformOrigin = origin
+                }.deskFloatingSurface(shape, 28.dp).clip(shape)
+                    .then(if (visible) AbsorbPointerInput else BlockPointerInput.clearAndSetSemantics { }),
+                    content = content)
+            }
+        }
+    }
+}
 
 /** Renders [content] in the nearest [OverlayHost]; without a host (isolated tests) it renders in place. */
 @Composable internal fun Portal(modal: Boolean, content: @Composable () -> Unit) {
@@ -216,11 +272,18 @@ const val OverlayPanelTag = "overlay-panel"
                                 offset = if (raw < 0f) -DeskMotion.rubberBand(-raw, height) else raw
                                 motion.dragOffset = offset
                                 val over = DeskMotion.shouldDismissSheet(offset, height, 0f, distance, velocityThreshold)
-                                if (over != armed) { armed = over; if (over && canDismiss.value) haptics.threshold() }
+                                if (over != armed) {
+                                    armed = over
+                                    if (over && canDismiss.value) {
+                                        haptics.threshold()
+                                    }
+                                }
                             }
                             if (!change.pressed) break
                         }
-                        if (!accepted) return@awaitEachGesture
+                        if (!accepted) {
+                            return@awaitEachGesture
+                        }
                         val height = motion.panelHeight(windowHeight)
                         val velocity = if (cancelled) 0f else tracker.calculateVelocity().y
                         val close = !cancelled && canDismiss.value && DeskMotion.shouldDismissSheet(offset, height, velocity, distance, velocityThreshold)
@@ -266,7 +329,7 @@ const val OverlayPanelTag = "overlay-panel"
     val c = LocalDeskColors.current
     Column(Modifier.fillMaxWidth().then(scope.dragHandle)) {
         SheetGrabber()
-        Row(Modifier.fillMaxWidth().heightIn(min = 44.dp).padding(start = if (leading == null) 20.dp else 8.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(start = if (leading == null) 24.dp else 12.dp, end = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             leading?.invoke()
             SNativeText(title, Modifier.weight(1f).semantics { heading() }, size = 17, lineHeight = 24, weight = FontWeight.SemiBold, heading = true)
             DeskIconButton("x", closeLabel, enabled = closeEnabled, iconSize = 18.dp, tint = c.mutedForeground, onClick = scope.close)
@@ -276,7 +339,7 @@ const val OverlayPanelTag = "overlay-panel"
 
 @Composable internal fun SheetGrabber() {
     val c = LocalDeskColors.current
-    Box(Modifier.fillMaxWidth().height(18.dp), contentAlignment = Alignment.Center) {
-        Box(Modifier.width(36.dp).height(4.dp).background(c.mutedForeground.copy(alpha = .3f), RoundedCornerShape(2.dp)))
+    Box(Modifier.fillMaxWidth().height(20.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.width(32.dp).height(4.dp).background(c.mutedForeground.copy(alpha = .28f), RoundedCornerShape(2.dp)))
     }
 }

@@ -168,7 +168,7 @@ class LiveWorkbenchAcceptanceTest {
     private class ClosableSocketTransport(private val transport: WorkbenchTransport) : WorkbenchTransport by transport {
         @Volatile var connections = 0
         @Volatile private var latest: SocketConnection? = null
-        override suspend fun socket(endpoint: String, direct: Boolean, observer: SocketObserver): SocketConnection = transport.socket(endpoint, direct, observer).also { latest = it; connections++ }
+        override suspend fun socket(endpoint: String, observer: SocketObserver): SocketConnection = transport.socket(endpoint,observer).also { latest = it; connections++ }
         fun disconnect() { checkNotNull(latest).close() }
     }
     private class IsolatedContext(private val base: Context) : ContextWrapper(base) {

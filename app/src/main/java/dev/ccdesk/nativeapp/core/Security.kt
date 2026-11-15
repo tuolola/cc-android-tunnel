@@ -27,11 +27,6 @@ internal fun parseUrl(input: String, websocket: Boolean): HttpUrl {
     return url
 }
 internal fun HttpUrl.origin(): String = newBuilder().encodedPath("/").build().toString().removeSuffix("/")
-fun normalizeEndpoint(raw: String): String {
-    if (raw.isBlank()) return ""
-    return try { val url = parseUrl(raw.trim(),false); url.newBuilder().encodedPath(url.encodedPath.trimEnd('/') + "/").build().toString() }
-    catch (_: IllegalArgumentException) { throw IllegalArgumentException("请输入完整的 HTTPS 工作台地址，可包含端口和入口路径。") }
-}
 fun normalizeServiceAddress(raw: String): String = try {
     val url = parseUrl(raw.trim(),true)
     require(url.encodedPath == "/ws")
@@ -53,8 +48,8 @@ internal class PinnedTrustManager(pin: String) : X509TrustManager {
         leaf.checkValidity()
     }
 }
-internal fun secureClient(origin: String, pin: String, cookies: CookieJar): OkHttpClient {
-    val builder = OkHttpClient.Builder().cookieJar(cookies).followRedirects(false).followSslRedirects(false).retryOnConnectionFailure(false)
+internal fun secureClient(origin: String, pin: String): OkHttpClient {
+    val builder = OkHttpClient.Builder().cookieJar(CookieJar.NO_COOKIES).followRedirects(false).followSslRedirects(false).retryOnConnectionFailure(false)
         .connectTimeout(15,TimeUnit.SECONDS).readTimeout(15,TimeUnit.SECONDS).callTimeout(15,TimeUnit.SECONDS)
     if (pin.isNotEmpty()) {
         val trust = PinnedTrustManager(pin)

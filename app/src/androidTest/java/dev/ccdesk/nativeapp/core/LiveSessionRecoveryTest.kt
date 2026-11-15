@@ -42,9 +42,9 @@ class LiveSessionRecoveryTest {
         val received = CopyOnWriteArrayList<String>()
         var connections = 0
         val observed = object : WorkbenchTransport by transport {
-            override suspend fun socket(endpoint: String, direct: Boolean, observer: SocketObserver): SocketConnection {
+            override suspend fun socket(endpoint: String, observer: SocketObserver): SocketConnection {
                 connections++
-                return transport.socket(endpoint, direct, object : SocketObserver by observer {
+                return transport.socket(endpoint,object : SocketObserver by observer {
                     override fun failed(cause: Throwable) {
                         failures += "Socket: ${cause.javaClass.simpleName}: ${cause.message}"
                         observer.failed(cause)

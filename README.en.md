@@ -17,7 +17,7 @@
 </p>
 
 <p>
-  <a href="https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.3-native/CCtunnel.apk"><img src="https://img.shields.io/badge/APK-1.0.3--native-16a34a?style=for-the-badge" alt="Download the CCtunnel 1.0.3-native public preview APK" /></a>
+  <a href="https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.4-native/CCtunnel.apk"><img src="https://img.shields.io/badge/APK-1.0.4--native-16a34a?style=for-the-badge" alt="Download the CCtunnel 1.0.4-native public preview APK" /></a>
   <a href="#quick-start"><img src="https://img.shields.io/badge/Setup-VPS%20to%20Android-2563eb?style=for-the-badge" alt="Set up the server, desktop and phone" /></a>
   <a href="#verification"><img src="https://img.shields.io/badge/Verification-Tests%20%26%20Audit-0f766e?style=for-the-badge" alt="Tests and audit" /></a>
   <a href="https://github.com/sun168567/cc-desk-tunnel"><img src="https://img.shields.io/badge/Origin-cc--desk--tunnel-475569?style=for-the-badge" alt="Upstream project" /></a>
@@ -25,7 +25,7 @@
 </p>
 
 <p>
-  <img src="https://img.shields.io/badge/Version-1.0.3--native-2563eb?style=flat-square" alt="Version 1.0.3-native" />
+  <img src="https://img.shields.io/badge/Version-1.0.4--native-2563eb?style=flat-square" alt="Version 1.0.4-native" />
   <img src="https://img.shields.io/badge/Kotlin-2.2.10-7f52ff?style=flat-square" alt="Kotlin 2.2.10" />
   <img src="https://img.shields.io/badge/UI-Jetpack%20Compose-4285f4?style=flat-square" alt="Jetpack Compose" />
   <img src="https://img.shields.io/badge/Android-7.0%2B-3ddc84?style=flat-square" alt="Android 7.0 and later" />
@@ -36,6 +36,8 @@
 > Connect to and operate your workbench on Android with Kotlin and Jetpack Compose.
 
 </div>
+
+**1.0.4-native compatibility note (versionCode 10):** This version supports only direct WSS service connections. HTTPS workbench login and the connection-mode switch have been removed. Old HTTPS addresses are not converted automatically: enter the complete WSS service address and credential supplied by your administrator. Existing WSS connections retain the credentials and certificate fingerprints saved for their addresses.
 
 First, a big thank-you to [sun168567](https://github.com/sun168567) and everyone contributing to [cc-desk-tunnel](https://github.com/sun168567/cc-desk-tunnel) for building something so useful and sharing it as open source. This Android version builds on their work, with a simple aim: let you pick up your phone and keep going when you're away from your computer. If you find it useful, consider giving the upstream project a star and showing its creators some support!
 
@@ -57,13 +59,13 @@ The launcher and in-app display name is **CCtunnel**; the project name is **CC A
 
 ```mermaid
 flowchart LR
-    Phone[Android: CCtunnel] <-->|WSS or HTTPS workbench API| Server[VPS: cc-desk-tunnel + Claude Code]
+    Phone[Android: CCtunnel] <-->|Direct WSS service connection| Server[VPS: cc-desk-tunnel + Claude Code]
     Desktop[Windows: upstream desktop client] <-->|Outbound encrypted execution channel| Server
     Desktop --> Project[Computer project files and tools]
     Server --> Model[Model service: your own account or API credential]
 ```
 
-To work on a **computer project**, create its session in the desktop client and open that existing session on the phone. The computer must remain powered on, online and connected through the desktop client. The phone can use a different network. An ordinary session **created directly on the phone runs in the server container**; it does not automatically use the computer's project or upload phone files.
+To work on a **computer project**, create its session in the desktop client, then open it under the corresponding computer in the phone sidebar's **远程控制** (Remote control) page. The computer must remain powered on, online and connected through the desktop client. The phone can use a different network. An ordinary session **created directly on the phone runs in the server container**; it does not automatically use the computer's project or upload phone files.
 
 Upstream supplies the server and desktop execution channel; this repository supplies the native Android interface. VPS hosting and model usage are separate costs. See the [upstream architecture](https://github.com/sun168567/cc-desk-tunnel/blob/v0.3.14/docs/architecture.md).
 
@@ -73,9 +75,9 @@ See [verification](#verification) for the checked scope, test commands and scena
 
 You need an accessible **protocol 25 workbench service** and its authentication details. This repository supplies the Android client, not the workbench server or model service. The app currently uses a Chinese interface.
 
-## App Screenshots
+## Historical App Screenshots
 
-These captures show the current native app on an Android emulator: the light and dark home screens, permission picker and session settings. They contain no conversation messages or connection credentials. Static screenshots illustrate the layout; see [verification](#verification) for the scope of animation, real-service and device checks.
+These captures preserve the **layout before the 1.0.4 redesign**: the old light and dark home screens, permission picker and session settings. They contain no conversation messages or connection credentials. The current top bar, sidebar, composer and menus have changed; see the [UI reference and verification notes (Chinese)](./docs/ui-reference.md) for this redesign and [verification](#verification) for the checked scope.
 
 <table>
   <tr>
@@ -102,18 +104,19 @@ The table describes the native implementation. Server capabilities and permissio
 
 | Area | Native implementation |
 | --- | --- |
-| Connection and authentication | HTTPS workbench login, direct WSS service-token connection, connection status, logout and reconnection |
-| Sessions and projects | Session list, creation, switching, renaming, deletion and pinning; projects shown in the session list, content search and earlier-history loading |
-| Conversation | Send messages, receive streaming replies, stop generation, continue a run and request context compaction |
-| Content rendering | Native Markdown, syntax-highlighted code, tables, links, images, text selection and copying |
-| Tools and interaction | Thinking content, tool calls and results, permission replies, question answers, background-task controls |
-| Model controls | Server-provided model catalog, custom model identifiers, thinking effort and session configuration |
-| Composer and session settings | Permission mode on the left of the composer, model selection and send on the right; the top-right gear opens search, status refresh, context and background-task controls |
-| Settings | Connection and access management, TOTP controls, account and usage views, in-app notifications and help |
+| Connection and authentication | WSS service-credential authentication, certificate fingerprints, connection status, logout and reconnection |
+| Sidebar and sessions | Remote control, notifications and ordinary conversation history; local title search, 30 more cached rows per expansion, session creation/switching, message search and earlier-history loading |
+| Remote control | Project sessions grouped by computer, computer/session search and retained offline history; excludes the server and this phone by device identity |
+| Conversation | Send messages, receive streaming replies, stop generation and continue runs when their state permits |
+| Content rendering | Native Markdown, syntax-highlighted code, tables, links and images; reply copying, text selection and system sharing, plus individual code-block copying |
+| Tools and interaction | Thinking content, tool calls and results, permission replies and question answers; supported active tools can move to the background or stop |
+| Model controls | Model picker in the top bar; server catalogs prefetched per device after connection, custom model identifiers and server-supported thinking effort |
+| Composer and session menu | Permission entry on the left of the composer only for computer sessions; new chat in the top bar, with only find and refresh in the top-right session menu |
+| Settings | Open settings from the sidebar's bottom avatar; settings search, direct-connection settings, server Web-access management and TOTP controls, account/usage, notifications and help |
 | Android behavior | Light/dark themes, native multiline editor, keyboard avoidance, scrolling, gestures, disabled and read-only states |
 | Recovery and local state | Retain loaded history during temporary disconnection, recover by durable event cursor, persist service-scoped preferences and protect credentials with Android Keystore |
 
-**App updates (starting with `1.0.2-native`)**: the settings overview offers manual checks, automatic foreground checks, and a prerelease toggle. Automatic checks wait 24 hours after success or one hour after failure. Downloads open in the system browser for user installation. Older `v1.0.1-native` installations do not include this feature; download and install the current `v1.0.3-native` version manually first. See [App updates and release maintenance (Chinese)](./docs/app-updates.md).
+**App updates (starting with `1.0.2-native`)**: open settings from the sidebar's bottom avatar for manual checks, automatic foreground checks and a prerelease toggle. Automatic checks wait 24 hours after success or one hour after failure. Downloads open in the system browser for user installation. Older `v1.0.1-native` installations do not include this feature; download and install the current `v1.0.4-native` version manually first. See [App updates and release maintenance (Chinese)](./docs/app-updates.md).
 
 ## Quick Start
 
@@ -209,14 +212,14 @@ Keep the three credentials separate: **SSH key/password** manages the VPS; **ser
 
 ### 6. Install CCtunnel on Android
 
-Download [CCtunnel.apk (v1.0.3-native)](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.3-native/CCtunnel.apk) for **Android 7.0 or newer**. This is a **Debug-signed public preview** (versionCode 9). Read the [release notes](https://github.com/tuolola/cc-android-tunnel/releases/tag/v1.0.3-native) and download the [SHA256SUMS.txt checksum list](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.3-native/SHA256SUMS.txt).
+Download [CCtunnel.apk (v1.0.4-native)](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.4-native/CCtunnel.apk) for **Android 7.0 or newer**. This is a **Debug-signed public preview** (versionCode 10). Read the [release notes](https://github.com/tuolola/cc-android-tunnel/releases/tag/v1.0.4-native) and download the [SHA256SUMS.txt checksum list](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.4-native/SHA256SUMS.txt).
 
 Verify the SHA-256 checksum, then transfer the APK to the phone and install it. With USB debugging enabled, you can alternatively run `adb install -r .\CCtunnel.apk` from the APK's directory on the development computer. Updating an existing installation requires the same package name and signing key, with a version Android permits as an update. Open **CCtunnel** and its connection screen. The phone does not need Node, Docker or Android Studio.
 
-This APK is **13,563,377 bytes**. Its SHA-256 is:
+The `1.0.4-native` APK is **13,612,525 bytes**. Verify its SHA-256 against the release's `SHA256SUMS.txt`:
 
 ```text
-dac00cd7cdb07a969cbb46f5b54aa2c92da1f56a090708778d590268e7f06cef
+88a7da5ecb501859c90d8c060e4209866348a1b3742c88191a1232fb17481051
 ```
 
 Upgrade from `v1.0.1-native` by downloading this version manually; the older version has no app-update entry point. The signing certificate is unchanged, so uninstalling the old version first is unnecessary.
@@ -225,7 +228,7 @@ To build it yourself, see [Build the Android App](#build-the-android-app). Upstr
 
 ### 7. Connect the phone to the same server
 
-The main path uses direct WSS and does **not** require upstream Web access to be enabled. In **连接工作台**, select **使用服务地址直连** if currently in HTTPS mode:
+The app uses direct WSS and does **not** require upstream Web access to be enabled. Open **连接工作台** and enter:
 
 | App field | Value |
 | --- | --- |
@@ -233,9 +236,9 @@ The main path uses direct WSS and does **not** require upstream Web access to be
 | 服务证书指纹（可选） | Trusted SHA-256 leaf fingerprint for self-signed TLS; normally empty for a system-trusted CA. This is not the SSH host fingerprint |
 | 服务凭据 | The complete random workbench credential, not a VPS password, Claude password or model API key |
 
-Tap **连接**, open the session list and choose the existing `Mobile check` session. Confirm its desktop history appears. To work on that computer project, use this session: creating a new ordinary session on the phone instead targets the Linux server container.
+Tap **连接**, open the sidebar's **远程控制** (Remote control) page, and choose `Mobile check` under the corresponding computer. Confirm its desktop history appears. To work on that computer project, use this session: creating a new ordinary session on the phone instead targets the Linux server container.
 
-Direct WSS authenticates using the service credential. HTTPS uses Web login, cookies and optional TOTP; enabling Web TOTP does not add a TOTP challenge to the direct WSS endpoint.
+The phone authenticates with the WSS service credential, without a workbench-password login or authenticator code. The service address must include `/ws`; an HTTPS webpage address is not accepted.
 
 ### 8. Continue a computer task from the phone
 
@@ -247,11 +250,9 @@ Direct WSS authenticates using the service credential. HTTPS uses Web login, coo
 
 A server-only session does not need the Windows computer online, but the server container must have that task's files and tools.
 
-### Optional: HTTPS workbench login
+### Server access management
 
-Follow the [upstream Web-access guide](https://github.com/sun168567/cc-desk-tunnel/blob/v0.3.14/docs/server-web.md): enable **设置 → 浏览器访问** in the desktop client and copy its complete HTTPS address, including any custom path. In the phone's connection screen choose **浏览器访问**, enter that address in **HTTPS 入口地址**, configure certificate trust, and connect. Enter the workbench service credential as **工作台密码**, plus the current six-digit code if TOTP is enabled. Do not append `/ws` or manually construct `/api/ws`.
-
-Use the new full URL after a domain/path change. For domains and reverse proxies see [upstream nginx setup](https://github.com/sun168567/cc-desk-tunnel/blob/v0.3.14/deploy/nginx.md). “Browser access” names the upstream authentication interface; the Android UI remains native Compose, without WebView rendering.
+**设置 → 访问管理** uses the current WSS connection to manage upstream server Web-access settings, the authenticator and browser login sessions. These controls apply to the upstream browser entry point, not another phone login method. Enabling Web TOTP does not add an authenticator challenge to direct WSS; the phone still connects with the service address and credential.
 
 ### Troubleshooting and maintenance
 
@@ -260,7 +261,7 @@ Use the new full URL after a domain/path change. For domains and reverse proxies
 | Timeout | VPS status, public address/port, provider and host firewalls, and phone-to-VPS connectivity |
 | Certificate failure | Correct fingerprint for the actual endpoint, certificate rotation/expiry and phone time; do not disable TLS verification |
 | Credential rejection | Complete workbench credential, not SSH/model credentials; update all clients after rotation |
-| HTTPS 404 or missing login information | Web access enabled, exact domain and configured path; direct WSS uses root `/ws` |
+| Invalid service address | Use the complete administrator-provided `wss://host:port/ws` address, not an HTTPS webpage URL; include `/ws` |
 | History loads but computer commands fail | Computer awake and online, desktop execution channel ready, correct session ownership |
 | New phone session cannot find a Windows path | It is a server session; create the project session on the desktop and open it on the phone |
 | Connected but model requests fail | Model login, quota, provider configuration and outbound server connectivity |
@@ -324,7 +325,13 @@ Use `scripts/measure-performance.ps1` with the [performance testing guide (Chine
 
 [The native build guard](./gradle/native-boundary.gradle.kts) checks production sources and resolved runtime dependencies. APK assembly also checks DEX references, packaged assets and native libraries for excluded JavaScript engines and WebView rendering. [The Python audit](./scripts/audit-native-apk.py) provides a separate check. The guard permits AndroidX's static `WebView.findAddress` compatibility reference; constructing or rendering a WebView remains rejected.
 
-### Scroll-fix verification — 2026-11-15
+### 1.0.4-native verification for this run — 2026-11-15
+
+The final `1.0.4-native` / versionCode 10 Debug APK and instrumentation APK built successfully, retaining the previous Debug signing certificate. This build passed **79 JVM tests**, Android Lint, source/APK native-boundary audits and **8 audit regression tests**.
+
+Before the version-number bump, **9 targeted tests with animation-frame checks ran on a physical Android phone**, covering floating shadows, reply actions and related interaction. Frame checks verify uniform fills during partial opacity and shadow pixels outside the surface; see the [UI reference and verification notes (Chinese)](./docs/ui-reference.md) for the precise scope. These checks are not a full physical-device suite or acceptance of every real-service flow. The 1.0.3 and 1.0.2 results below are historical records.
+
+### 1.0.3-native historical scroll-fix verification — 2026-11-15
 
 `1.0.3-native` (versionCode 9) fixes flickering and jumping back to the bottom when scrolling through history after opening or switching chats. Scroll observers now bind to the current chat, preserve the reading position and resume following replies after tapping the return-to-latest button.
 
@@ -365,16 +372,16 @@ Read the argument checks before enabling opt-in tests. Real-service tests requir
 **Remaining acceptance work:**
 
 - A real permission-approval/question round trip; current approval/question coverage uses native UI fixtures.
-- Real background tasks, complete TOTP/access-revocation flows and exhaustive multi-window history pagination.
-- Animation smoothness, rapid repeated actions and interrupted transitions on real devices; controlled-clock gesture tests do not replace these checks.
+- Real background tasks, server Web TOTP/browser-session revocation flows and exhaustive multi-window history pagination.
+- Animation smoothness, rapid repeated actions and interrupted transitions across more devices; this run's targeted frame checks on one phone do not replace broader device acceptance.
 - Physical-device haptics, TalkBack, additional Android API levels and large font scales.
 - Complete visual checks across system fonts, text-selection handles and screen sizes.
 
 ## Security and Local Data
 
-HTTPS/WSS are required. System CA mode retains platform trust and hostname checks. Explicit fingerprint mode checks the configured host, the exact leaf certificate fingerprint and certificate validity; there is no trust-all fallback. Authentication redirects are disabled.
+Workbench connections require a WSS service address. System CA mode retains platform trust and hostname checks. Explicit fingerprint mode checks the configured host, the exact leaf certificate fingerprint and certificate validity; there is no trust-all fallback. Connection redirects are disabled.
 
-Saved tokens and browser-session cookies are encrypted using Android Keystore. Logout and trust changes clear the applicable credentials. App backup is disabled. Service-scoped local preferences are separate from credentials; retained history during a disconnect is not an offline archive of all server conversations.
+Saved service credentials are encrypted using Android Keystore. Logout and trust changes clear the applicable credentials. App backup is disabled. Service-scoped local preferences are separate from credentials; retained history during a disconnect is not an offline archive of all server conversations.
 
 The Android installation ID is `dev.ccdesk.nativeapp`. Connection deep links use `cc-android-tunnel://`.
 

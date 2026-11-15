@@ -31,10 +31,10 @@ private val allowed = setOf("server.session.create","session.subscribe","session
     "session.rename","session.delete","session.configure","session.compact","message.send","run.cancel","run.continue",
     "run.task.stop","run.task.background","approval.reply","usage.summary","usage.query","quota.watch","account.status",
     "compaction.get","web.settings.get","web.settings.update","web.sessions.revoke","web.totp.setup","web.totp.enable","web.totp.disable")
-private fun validReady(frame: JSONObject, direct: Boolean): Boolean {
+private fun validReady(frame: JSONObject): Boolean {
     val version = frame.opt("protocolVersion")
     return version is Number && version.toDouble() == PROTOCOL_VERSION.toDouble() &&
-        (if (direct) frame.isNull("browser") || frame.opt("browser") == false else frame.optJSONObject("browser") != null) && frame.optJSONArray("sessions") != null
+        (frame.isNull("browser") || frame.opt("browser") == false) && frame.optJSONArray("sessions") != null
 }
 
 /** Protocol 25 client. All state and callbacks are confined to [dispatcher]; IO lives in transport. */
@@ -56,12 +56,14 @@ class WorkbenchRepository(private val transport: WorkbenchTransport, private val
     private var retryOnForeground = true
     private var openSession: String? = null
     private var active = true
-    private var lastActivity = 0L
     private data class Pending(val result: CompletableDeferred<JSONObject>, val type: String, val sessionId: String?, var frame: JSONObject? = null)
     private val pending = mutableMapOf<String,Pending>()
     private data class Subscription(val sessionId: String, val requestId: String, val task: Deferred<Unit>)
     private var subscription: Subscription? = null
-    private val catalogReads = mutableMapOf<String,Deferred<Unit>>()
+    private data class CatalogRead(val sessionId: String, val task: Deferred<Unit>)
+    private val catalogReads = mutableMapOf<String,CatalogRead>()
+    private val catalogAttempts = mutableSetOf<String>()
+    private var catalogPresenceKnown = false
     private var writes: Job? = null
     private var preferenceLoaded = false
     private var quotaWanted = false
@@ -76,8 +78,8 @@ class WorkbenchRepository(private val transport: WorkbenchTransport, private val
         retry?.cancel(); retry = null; handshake?.cancel(); handshake = null
         val old = socket; socket = null; openSession = null; old?.close()
         pending.values.forEach { it.result.completeExceptionally(IllegalStateException("连接已中断，请恢复连接后核对操作结果。")) }
-        pending.clear(); subscription = null; catalogReads.clear(); refreshingQuota = false
-        patch { it.copy(histories = it.histories.mapValues { (_, h) -> h.copy(loading = false,fragments = emptyList()) }) }
+        pending.clear(); subscription = null; catalogReads.clear(); catalogAttempts.clear(); catalogPresenceKnown = false; refreshingQuota = false
+        patch { it.copy(modelCatalogLoading = emptySet(), histories = it.histories.mapValues { (_, h) -> h.copy(loading = false,fragments = emptyList()) }) }
         return generation
     }
     suspend fun start() = withContext(dispatcher) {
@@ -85,15 +87,15 @@ class WorkbenchRepository(private val transport: WorkbenchTransport, private val
         val ticket = generation
         try {
             val raw = transport.getEndpoint()
-            val endpoint = if (raw.startsWith("wss:",true)) normalizeServiceAddress(raw) else normalizeEndpoint(raw)
+            val endpoint = if (raw.isBlank()) "" else normalizeServiceAddress(raw)
             if (ticket != generation) return@withContext
             patch { it.copy(endpoint = endpoint,status = if (endpoint.isEmpty()) "setup" else "connecting") }
             if (endpoint.isNotEmpty()) reconnect()
         } catch (e: Exception) { if (e is CancellationException) throw e; if (ticket == generation) patch { it.copy(status = "setup",error = message(e)) } }
     }
     suspend fun setEndpoint(raw: String) = withContext(dispatcher) {
-        val endpoint = normalizeEndpoint(raw)
-        val forgotten = current.endpoint.takeIf { endpoint.isEmpty() && it.startsWith("wss:") }
+        val endpoint = if (raw.isBlank()) "" else normalizeServiceAddress(raw)
+        val forgotten = current.endpoint.takeIf { endpoint.isEmpty() && it.isNotEmpty() }
         chooseEndpoint(endpoint, if (forgotten == null) null else suspend { transport.saveCredential(forgotten,"") })
     }
     suspend fun connectService(raw: String, credential: String) = withContext(dispatcher) {
@@ -115,11 +117,11 @@ class WorkbenchRepository(private val transport: WorkbenchTransport, private val
     }
     suspend fun fingerprint(endpoint: String): String = transport.fingerprint(endpoint)
     suspend fun setFingerprint(rawEndpoint: String, rawPin: String) = withContext(dispatcher) {
-        val endpoint = if (rawEndpoint.startsWith("wss:",true)) normalizeServiceAddress(rawEndpoint) else normalizeEndpoint(rawEndpoint)
+        val endpoint = normalizeServiceAddress(rawEndpoint)
         require(endpoint.isNotEmpty())
         val pin = normalizeFingerprint(rawPin)
         if (transport.fingerprint(endpoint) == pin) return@withContext
-        if (current.endpoint.isNotEmpty() && parseUrl(endpoint,endpoint.startsWith("wss:")).origin() == parseUrl(current.endpoint,current.endpoint.startsWith("wss:")).origin()) {
+        if (current.endpoint.isNotEmpty() && parseUrl(endpoint,true).origin() == parseUrl(current.endpoint,true).origin()) {
             stop(); retryOnForeground = false; patch { it.copy(status = "offline",authenticated = false,error = "工作台证书设置已修改，请重新连接。") }
         }
         transport.setFingerprint(endpoint,pin)
@@ -143,30 +145,20 @@ class WorkbenchRepository(private val transport: WorkbenchTransport, private val
         if (ticket != generation) return
         preferenceLoaded = true; patch { it.copy(pins = prefs.pins,notices = prefs.notices) }
     }
-    private suspend fun establish(data: JSONObject, ticket: Long) {
-        if (ticket != generation) return
-        require(data.opt("authenticated") is Boolean) { "这个地址没有返回工作台登录信息。" }
-        if (!data.getBoolean("authenticated")) {
-            preferenceLoaded = false
-            mutableState.value = WorkbenchState(endpoint = current.endpoint,status = "login",totpEnabled = data.optBoolean("totpEnabled")); return
-        }
-        val endpoint = current.endpoint
-        patch { it.copy(authenticated = true,totpEnabled = data.optBoolean("totpEnabled"),webSessionId = data.optJSONObject("session")?.stringOrNull("id"),status = "connecting") }
-        loadPreferences(endpoint,ticket)
-        if (ticket != generation) return
-        val socketUrl = parseUrl(endpoint,false).resolve("api/ws")!!.toString().replaceFirst("https:","wss:")
-        attach(socketUrl,false,json("type" to "web.auth","protocolVersion" to PROTOCOL_VERSION),ticket)
-    }
     private suspend fun openService(endpoint: String, ticket: Long) {
         val token = transport.credential(endpoint)
         if (ticket != generation) return
         if (token.isEmpty()) { patch { it.copy(status = "setup",error = "请输入此服务地址对应的服务凭据。",authenticated = false) }; return }
         val deviceId = transport.deviceId()
+        if (ticket != generation) return
+        // Publish the exact identity used by the device frame before presence can arrive.
+        // Reconnect retains it with cached history; switching services resets the state.
+        patch { it.copy(localDeviceId = deviceId) }
         loadPreferences(endpoint,ticket)
         if (ticket != generation) return
-        attach(endpoint,true,json("type" to "auth","protocolVersion" to PROTOCOL_VERSION,"token" to token,"deviceName" to "CC Android Tunnel","tunnel" to false),ticket,deviceId)
+        attach(endpoint,json("type" to "auth","protocolVersion" to PROTOCOL_VERSION,"token" to token,"deviceName" to "CC Android Tunnel","tunnel" to false),ticket,deviceId)
     }
-    private suspend fun attach(url: String, direct: Boolean, greeting: JSONObject, ticket: Long, deviceId: String? = null) {
+    private suspend fun attach(url: String, greeting: JSONObject, ticket: Long, deviceId: String) {
         val connected = CompletableDeferred<SocketConnection>()
         val listener = object : SocketObserver {
             override fun opened() { scope.launch { val connection = connected.await(); if (ticket == generation && !connection.send(greeting.toString())) disconnected("实时连接已关闭。") } }
@@ -174,20 +166,19 @@ class WorkbenchRepository(private val transport: WorkbenchTransport, private val
                 if (ticket != generation) return@launch
                 try {
                     val frame = JSONObject(text)
-                    if (deviceId != null && frame.optString("type") == "ready" && validReady(frame,direct)) connected.await().send(json("type" to "device","id" to deviceId).toString())
+                    if (frame.optString("type") == "ready" && validReady(frame)) connected.await().send(json("type" to "device","id" to deviceId).toString())
                     receive(frame)
                 } catch (e: Exception) { if (e is CancellationException) throw e; disconnected("工作台返回了无法读取的数据。") }
             } }
             override fun closed(code: Int, reason: String) { scope.launch {
                 if (ticket != generation) return@launch
-                if (direct && code in 4001..4003) disconnected(if (code == 4001) "服务认证失败，请核对服务凭据。" else "服务拒绝连接，请核对客户端协议版本。",false)
-                else if (code == 4001 && reason == "Invalid browser authentication") disconnected("登录握手失败，请核对工作台版本与登录状态。",false)
-                else disconnected(if (code == 4001) "登录状态已改变。" else "实时连接已断开，正在重新连接。")
+                if (code in 4001..4003) disconnected(if (code == 4001) "服务认证失败，请核对服务凭据。" else "服务拒绝连接，请核对客户端协议版本。",false)
+                else disconnected("实时连接已断开，正在重新连接。")
             } }
             override fun failed(cause: Throwable) { scope.launch { if (ticket == generation) { val error = networkError(cause); disconnected(message(error),error !is CertificateFailure) } } }
         }
         try {
-            val connection = transport.socket(url,direct,listener)
+            val connection = transport.socket(url,listener)
             connected.complete(connection)
             if (ticket != generation) { connection.close(); return }
             socket = connection
@@ -205,7 +196,7 @@ class WorkbenchRepository(private val transport: WorkbenchTransport, private val
         if (endpoint.isEmpty()) return@withContext
         retryOnForeground = true
         val ticket = stop(); patch { it.copy(status = "connecting",error = null) }
-        try { if (endpoint.startsWith("wss:")) openService(endpoint,ticket) else establish(transport.http(endpoint,"session"),ticket) }
+        try { openService(endpoint,ticket) }
         catch (e: Exception) { if (e is CancellationException) throw e; if (ticket != generation) return@withContext; val error = networkError(e); disconnected(message(error),error !is CertificateFailure); throw error }
     }
     fun foreground(active: Boolean) { scope.launch {
@@ -215,34 +206,9 @@ class WorkbenchRepository(private val transport: WorkbenchTransport, private val
         // The transport heartbeat reports dead sockets through disconnected().
         else if (retryOnForeground && current.endpoint.isNotEmpty() && current.status == "offline") runCatching { reconnect() }
     } }
-    suspend fun login(password: String, code: String? = null) = withContext(dispatcher) {
-        val endpoint = current.endpoint
-        require(endpoint.isNotEmpty() && password.isNotEmpty()) { "请填写工作台地址和服务凭据。" }
-        val ticket = stop(); patch { it.copy(status = "connecting",error = null) }
-        try {
-            val body = json("password" to password).apply { if (!code.isNullOrEmpty()) put("code",code) }
-            val result = transport.http(endpoint,"login",body)
-            check(result.optBoolean("authenticated")) { "登录失败，请检查凭据。" }
-            establish(result,ticket)
-        } catch (e: Exception) { if (e is CancellationException) throw e; if (ticket != generation) return@withContext; patch { it.copy(status = if (it.authenticated) "offline" else "login",error = message(e)) }; throw e }
-    }
-    suspend fun logout() = withContext(dispatcher) {
-        val endpoint = current.endpoint
-        if (endpoint.startsWith("wss:")) { setEndpoint(""); return@withContext }
-        val ticket = stop(); patch { it.copy(status = "connecting") }
-        try { transport.http(endpoint,"logout",JSONObject()) } catch (e: Exception) { if (ticket == generation) disconnected(message(e)); throw e }
-        if (ticket != generation) return@withContext
-        stop(); preferenceLoaded = false; quotaWanted = false
-        val pins = current.pins
-        mutableState.value = WorkbenchState(endpoint = endpoint,status = "login",totpEnabled = current.totpEnabled)
-        transport.clearBrowserSession(endpoint)
-        val previous = writes
-        val cleared = persistenceScope.async { previous?.join(); transport.writePreferences(endpoint,Preferences(pins, emptyList())) }
-        writes = cleared
-        cleared.await()
-    }
+    suspend fun logout() = setEndpoint("")
     suspend fun command(type: String, fields: JSONObject = JSONObject()): JSONObject = withContext(dispatcher) {
-        val reading = fields.stringOrNull("sessionId")?.let { catalogReads[it] }
+        val reading = fields.stringOrNull("sessionId")?.let { id -> catalogReads.values.find { it.sessionId == id }?.task }
         if (reading != null && type in setOf("session.configure","message.send")) {
             val ticket = generation
             try { reading.await() } catch (e: Exception) { if (e is CancellationException) throw e }
@@ -268,18 +234,49 @@ class WorkbenchRepository(private val transport: WorkbenchTransport, private val
         finally { if (pending[id] === waiter) pending.remove(id) }
     }
     suspend fun loadModelCatalog(sessionId: String) = withContext(dispatcher) {
-        val existing = catalogReads[sessionId]
-        if (existing != null) { existing.await(); return@withContext }
         val session = current.sessions.find { it.id == sessionId } ?: error("这个会话已不存在。")
         val key = session.device?.id ?: session.id
+        val existing = catalogReads[key]
+        if (existing != null) { existing.task.await(); return@withContext }
+        val ticket = generation
         val previous = current.modelCatalogs[key]
+        catalogAttempts += key
+        patch { it.copy(modelCatalogLoading = it.modelCatalogLoading + key, modelCatalogErrors = it.modelCatalogErrors - key) }
         val read = scope.async(start = CoroutineStart.LAZY) {
-            command("session.status",json("sessionId" to sessionId,"quota" to false))
-            val catalog = current.modelCatalogs[key]
-            check(catalog != null && catalog.models.isNotEmpty() && catalog !== previous) { "服务端本次未返回模型目录，可稍后重试。" }
+            try {
+                check(ticket == generation) { "连接已中断，请恢复连接后重试。" }
+                command("session.status",json("sessionId" to sessionId,"quota" to false))
+                check(ticket == generation) { "连接已中断，请恢复连接后重试。" }
+                val catalog = current.modelCatalogs[key]
+                check(catalog != null && catalog.models.isNotEmpty() && catalog !== previous) { "服务端本次未返回模型目录，可稍后重试。" }
+            } catch (e: Exception) {
+                if (e !is CancellationException && ticket == generation) patch { it.copy(modelCatalogErrors = it.modelCatalogErrors + (key to message(e))) }
+                throw e
+            } finally {
+                if (ticket == generation) patch { it.copy(modelCatalogLoading = it.modelCatalogLoading - key) }
+            }
         }
-        catalogReads[sessionId] = read
-        try { read.start(); read.await() } finally { if (catalogReads[sessionId] === read) catalogReads.remove(sessionId) }
+        catalogReads[key] = CatalogRead(sessionId, read)
+        try { read.start(); read.await() } finally { if (catalogReads[key]?.task === read) catalogReads.remove(key) }
+    }
+    /** Refresh once per device on each connection, without selecting or creating a chat. */
+    private fun preloadModelCatalogs() {
+        if (current.status != "online") return
+        val ticket = generation
+        val servers = current.serverDeviceIds()
+        val present = current.devices.associateBy { it.id }
+        current.sessions.filter { session ->
+            session.activeRun == null && session.device?.id != current.localDeviceId &&
+                (session.device == null || session.device.server || session.device.id in servers ||
+                    (catalogPresenceKnown && present[session.device.id]?.ready == true))
+        }.distinctBy { it.device?.id ?: it.id }.forEach { session ->
+            val key = session.device?.id ?: session.id
+            if (!catalogAttempts.add(key)) return@forEach
+            scope.launch {
+                if (ticket != generation) return@launch
+                try { loadModelCatalog(session.id) } catch (e: CancellationException) { throw e } catch (_: Exception) { /* Exposed in modelCatalogErrors; manual retry remains available. */ }
+            }
+        }
     }
     suspend fun configureModel(sessionId: String, model: String?, effort: String?) {
         val session = current.sessions.find { it.id == sessionId }
@@ -291,7 +288,7 @@ class WorkbenchRepository(private val transport: WorkbenchTransport, private val
         if (event.payload.optString("type") != "native.capabilities" || event.payload.optJSONArray("models") == null) return
         val key = session.device?.id ?: session.id
         if ((current.modelCatalogs[key]?.at ?: "") > event.createdAt) return
-        patch { it.copy(modelCatalogs = it.modelCatalogs + (key to Catalog(event.payload.getJSONArray("models").objects().map(ModelInfo::from),event.createdAt))) }
+        patch { it.copy(modelCatalogs = it.modelCatalogs + (key to Catalog(event.payload.getJSONArray("models").objects().map(ModelInfo::from),event.createdAt)), modelCatalogErrors = it.modelCatalogErrors - key) }
     }
     private fun notify(id: String, sessionId: String, title: String, body: String) {
         if (current.notices.any { it.id == id }) return
@@ -306,18 +303,18 @@ class WorkbenchRepository(private val transport: WorkbenchTransport, private val
         if (waiter != null) waiter.frame = frame
         when (frame.optString("type")) {
             "ready" -> {
-                val direct = current.endpoint.startsWith("wss:")
-                if (!validReady(frame,direct)) { disconnected("工作台协议版本不匹配，请核对服务端版本。",false); return }
+                if (!validReady(frame)) { disconnected("工作台协议版本不匹配，请核对服务端版本。",false); return }
                 handshake?.cancel(); handshake = null; retryCount = 0
                 val sessions = frame.getJSONArray("sessions").objects().map(Session::from)
                 val selected = current.selectedId?.takeIf { id -> sessions.any { it.id == id } }
-                patch { it.copy(status = "online",authenticated = true,error = null,version = frame.stringOrNull("version"),defaultModel = frame.stringOrNull("model"),webSessionId = frame.optJSONObject("browser")?.stringOrNull("sessionId"),serverDeviceId = frame.optJSONObject("browser")?.stringOrNull("serverDeviceId"),sessions = sessions,selectedId = selected) }
+                patch { it.copy(status = "online",authenticated = true,error = null,version = frame.stringOrNull("version"),defaultModel = frame.stringOrNull("model"),sessions = sessions,selectedId = selected) }
+                preloadModelCatalogs()
                 if (selected != null) scope.launch { runCatching { selectSession(selected) }.onFailure { e -> patch { it.copy(error = message(e)) } } }
                 if (quotaWanted) scope.launch { runCatching { command("quota.watch",json("active" to true)) } }
             }
-            "devices" -> { val devices = frame.optJSONArray("devices").objects().map(Device::from); patch { it.copy(devices = devices,serverDeviceId = devices.find { it.server }?.id ?: it.serverDeviceId) } }
+            "devices" -> { val devices = frame.optJSONArray("devices").objects().map(Device::from); catalogPresenceKnown = true; patch { it.copy(devices = devices,serverDeviceId = devices.find { it.server }?.id ?: it.serverDeviceId) }; preloadModelCatalogs() }
             "session.updated" -> {
-                val session = Session.from(frame.getJSONObject("session")); val old = upsert(session) ?: return; val run = session.activeRun
+                val session = Session.from(frame.getJSONObject("session")); val old = upsert(session); preloadModelCatalogs(); if (old == null) return; val run = session.activeRun
                 if (run?.status == "awaiting_approval" && (old.activeRun?.status != run.status || old.activeRun?.waiting != run.waiting)) notify("${run.id}:${run.waiting}:${session.updatedAt}",session.id,session.title,if (run.waiting == "question") "Claude 有一个问题等你回答" else "有工具操作等待审批")
                 else if (run == null && old.activeRun != null) notify("${old.activeRun.id}:ended",session.id,session.title,"本轮运行已结束")
             }
@@ -331,9 +328,9 @@ class WorkbenchRepository(private val transport: WorkbenchTransport, private val
                 if (event.sessionId == openSession) updateHistory(event.sessionId) { addEvent(it,event) }
                 if (p.optString("type") == "run.status" && p.optString("status") in setOf("cancelled","failed","completed")) notify("${event.runId}:ended",event.sessionId,current.sessions.find { it.id == event.sessionId }?.title ?: "工作台",when(p.optString("status")) { "completed" -> "本轮运行已完成"; "failed" -> "本轮运行失败"; else -> "本轮运行已停止" })
             }
-            "connection.error" -> if (current.endpoint.startsWith("wss:") && frame.optString("code") in setOf("unauthorized","version_mismatch")) { patch { it.copy(authenticated = false) }; disconnected(frame.optString("message","代理服务认证失败，请核对服务凭据和版本。"),false) } else patch { it.copy(error = frame.stringOrNull("message")) }
+            "connection.error" -> if (frame.optString("code") in setOf("unauthorized","version_mismatch")) { patch { it.copy(authenticated = false) }; disconnected(frame.optString("message","代理服务认证失败，请核对服务凭据和版本。"),false) } else patch { it.copy(error = frame.stringOrNull("message")) }
             "account.state" -> patch { it.copy(account = frame) }
-            "web.settings.state" -> { val values = frame.getJSONObject("values"); patch { it.copy(webSettings = values,totpEnabled = values.optBoolean("totpEnabled")) } }
+            "web.settings.state" -> { val values = frame.getJSONObject("values"); patch { it.copy(webSettings = values) } }
             "usage.summary" -> patch { it.copy(usageSummary = frame) }
             "usage.page" -> patch { it.copy(usagePage = frame) }
         }
@@ -409,7 +406,6 @@ class WorkbenchRepository(private val transport: WorkbenchTransport, private val
     }
     fun togglePin(id: String) { scope.launch { if (current.sessions.any { it.id == id }) { patch { it.copy(pins = if (id in it.pins) it.pins - id else it.pins + id) }; savePreferences() } } }
     fun readNotice(id: String? = null) { scope.launch { patch { it.copy(notices = it.notices.map { n -> if (id == null || n.id == id) n.copy(read = true) else n }) }; savePreferences() } }
-    fun activity() { scope.launch { if (socket != null && current.webSessionId != null && current.status == "online" && System.currentTimeMillis() - lastActivity >= 10_000) { lastActivity = System.currentTimeMillis(); socket?.send(json("type" to "web.activity").toString()) } } }
     fun setQuotaWatching(active: Boolean) { scope.launch { quotaWanted = active; if (current.status == "online") runCatching { command("quota.watch",json("active" to active)) } } }
     fun dispose() {
         if (disposed) return

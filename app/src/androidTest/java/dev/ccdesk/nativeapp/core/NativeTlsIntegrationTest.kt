@@ -7,7 +7,6 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -15,7 +14,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
-import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
@@ -38,7 +36,6 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -66,16 +63,13 @@ class NativeTlsIntegrationTest {
         val requests = CopyOnWriteArrayList<ObservedRequest>()
         val frames = MutableStateFlow<List<ObservedFrame>>(emptyList())
         val upgrades = AtomicInteger()
-        private val loggedIn = AtomicBoolean(false)
-        @Volatile var sessionProbeBlock: Pair<CountDownLatch,CountDownLatch>? = null
+        @Volatile var upgradeBlock: Pair<CountDownLatch,CountDownLatch>? = null
         private val history = CopyOnWriteArrayList<JSONObject>()
         private val liveSockets = CopyOnWriteArrayList<WebSocket>()
         @Volatile private var live: WebSocket? = null
         val origin get() = "https://127.0.0.1:${server.port}"
-        val browserEndpoint get() = "$origin/workbench/"
+        val legacyHttpsEndpoint get() = "$origin/workbench/"
         val serviceEndpoint get() = "wss://127.0.0.1:${server.port}/ws"
-        val cookieName = "cc_web_" + "a".repeat(32) + "_" + "b".repeat(16)
-        val cookieSecret = "c".repeat(64)
         val serviceToken = "instrumentation-only-service-token-0123456789"
 
         init {
@@ -87,40 +81,20 @@ class NativeTlsIntegrationTest {
                     val path = request.path.orEmpty()
                     val body = request.body.clone().readUtf8()
                     requests += ObservedRequest(path,request.getHeader("Origin"),request.getHeader("Cookie"),body)
-                    return when (path) {
-                        "/workbench/api/session" -> {
-                            sessionProbeBlock?.let { (entered,release) -> entered.countDown(); release.await(10,TimeUnit.SECONDS) }
-                            response(json("authenticated" to (loggedIn.get() && hasCookie(request)),"totpEnabled" to true,"session" to json("id" to "browser-session")))
-                        }
-                        "/workbench/api/login" -> {
-                            val submitted = runCatching { JSONObject(body) }.getOrDefault(JSONObject())
-                            if (submitted.optString("password") != "integration-password" || submitted.optString("code") != "123456") response(json("error" to "Invalid fixture credentials"),401)
-                            else {
-                                loggedIn.set(true)
-                                response(json("authenticated" to true,"totpEnabled" to true,"session" to json("id" to "browser-session")))
-                                    .addHeader("Set-Cookie","$cookieName=$cookieSecret; Path=/workbench/; Max-Age=3600; Secure; HttpOnly")
-                            }
-                        }
-                        "/workbench/api/logout" -> {
-                            loggedIn.set(false)
-                            response(json("authenticated" to false))
-                                .addHeader("Set-Cookie","$cookieName=; Path=/workbench/; Max-Age=0; Secure; HttpOnly")
-                        }
-                        "/workbench/api/ws" -> if (loggedIn.get() && hasCookie(request)) upgrade(false) else response(json("error" to "Missing fixture cookie"),401)
-                        "/ws" -> upgrade(true)
-                        else -> response(json("error" to "Unsupported fixture route"),404)
-                    }
+                    return if (path == "/ws") {
+                        upgradeBlock?.let { (entered, release) -> entered.countDown(); release.await(10, TimeUnit.SECONDS) }
+                        upgrade()
+                    } else response(json("error" to "Unsupported fixture route"), 404)
                 }
             }
             server.start(InetAddress.getByName("127.0.0.1"),0)
         }
-        private fun hasCookie(request: RecordedRequest) = request.getHeader("Cookie").orEmpty().split(';').map(String::trim).contains("$cookieName=$cookieSecret")
         private fun response(body: JSONObject, status: Int = 200) = MockResponse().setResponseCode(status).addHeader("Content-Type","application/json").setBody(body.toString())
         private fun session() = json("id" to "session-one","title" to "Integration session","projectPath" to "/fixture/project","permissionMode" to "default",
             "createdAt" to "2026-01-01T00:00:00Z","updatedAt" to "2026-01-01T00:00:00Z","device" to json("id" to "fixture-server","name" to "Fixture server"),"activeRun" to null)
         fun event(sequence: Long, text: String, type: String = "text.delta") = json("sessionId" to "session-one","runId" to "run-one","sequence" to sequence,
             "createdAt" to "2026-01-01T00:00:00Z","payload" to json("type" to type,"messageId" to "reply-one","text" to text))
-        private fun upgrade(direct: Boolean): MockResponse {
+        private fun upgrade(): MockResponse {
             val connection = upgrades.incrementAndGet()
             return MockResponse().withWebSocketUpgrade(object : WebSocketListener() {
                 override fun onOpen(webSocket: WebSocket, response: Response) { live = webSocket; liveSockets += webSocket }
@@ -128,11 +102,10 @@ class NativeTlsIntegrationTest {
                     val frame = JSONObject(text)
                     frames.update { it + ObservedFrame(connection,frame) }
                     when (frame.optString("type")) {
-                        "auth","web.auth" -> {
-                            val valid = frame.optInt("protocolVersion") == 25 && if (direct) frame.optString("type") == "auth" && frame.optString("token") == serviceToken && !frame.optBoolean("tunnel",true) else frame.optString("type") == "web.auth" && !frame.has("token")
+                        "auth" -> {
+                            val valid = frame.optInt("protocolVersion") == 25 && frame.optString("token") == serviceToken && !frame.optBoolean("tunnel",true)
                             if (!valid) { webSocket.close(4001,"Invalid fixture authentication"); return }
                             val ready = json("type" to "ready","protocolVersion" to 25,"version" to "instrumentation-fixture","sessions" to JSONArray().put(session()))
-                            if (!direct) ready.put("browser",json("sessionId" to "browser-session","serverDeviceId" to "fixture-server"))
                             webSocket.send(ready.toString())
                             webSocket.send(json("type" to "devices","devices" to JSONArray().put(json("id" to "fixture-server","name" to "Fixture server","server" to true,"ready" to true))).toString())
                         }
@@ -178,55 +151,25 @@ class NativeTlsIntegrationTest {
         withTimeout(10_000) { repo.awaitPersistenceDrain(); transport.awaitClosed() }
     }
 
-    @Test fun browserHttpsLoginPersistsScopedEncryptedCookieAndAuthenticatesWssAfterRestart() = runBlocking {
+    @Test fun legacyHttpsLoginIsRejectedWithoutConnectingOrSendingCredentials() = runBlocking {
         val context = isolatedContext()
         val fixture = TlsWorkbench()
-        var transport = AndroidWorkbenchTransport(context)
-        var repo = WorkbenchRepository(transport)
+        val transport = AndroidWorkbenchTransport(context)
+        val repo = WorkbenchRepository(transport)
         try {
-            repo.setFingerprint(fixture.browserEndpoint,fixture.fingerprint)
-            repo.setEndpoint(fixture.browserEndpoint)
-            assertEquals("login",repo.state.value.status)
-            assertTrue(repo.state.value.totpEnabled)
-            val invalid = runCatching { repo.login("wrong-password","000000") }
-            assertTrue(invalid.isFailure)
-            assertEquals("login",repo.state.value.status)
-            assertEquals(0,fixture.upgrades.get())
-
-            repo.login("integration-password","123456")
-            awaitState(repo) { it.status == "online" }
-            val auth = fixture.frame("web.auth",1)
-            assertEquals(25,auth.getInt("protocolVersion")); assertFalse(auth.has("token"))
-            val loginRequest = fixture.requests.last { it.path == "/workbench/api/login" }
-            assertEquals(fixture.origin,loginRequest.origin)
-            assertEquals("123456",JSONObject(loginRequest.body).getString("code"))
-            val upgrade = fixture.requests.last { it.path == "/workbench/api/ws" }
-            assertEquals(fixture.origin,upgrade.origin)
-            assertEquals("${fixture.cookieName}=${fixture.cookieSecret}",upgrade.cookie)
-            val encrypted = context.getSharedPreferences("workbench-native-secrets-v1",Context.MODE_PRIVATE).all.values.map { it.toString() }
-            assertTrue(encrypted.isNotEmpty())
-            assertTrue(encrypted.none { it.contains(fixture.cookieSecret) })
-
-            dispose(repo,transport)
-            transport = AndroidWorkbenchTransport(context)
-            repo = WorkbenchRepository(transport)
+            // Simulate an installation that still has a pre-WSS-only saved endpoint.
+            check(context.getSharedPreferences("ccdesk-native-v1", Context.MODE_PRIVATE).edit()
+                .putString("endpoint", fixture.legacyHttpsEndpoint).commit())
             repo.start()
-            awaitState(repo) { it.status == "online" }
-            fixture.frame("web.auth",2)
-            val restoredProbe = fixture.requests.last { it.path == "/workbench/api/session" }
-            assertEquals("${fixture.cookieName}=${fixture.cookieSecret}",restoredProbe.cookie)
-            repo.selectSession("session-one")
-            assertEquals(1L,repo.state.value.histories.getValue("session-one").events.single().sequence)
-
-            repo.logout()
-            assertEquals("login",repo.state.value.status); assertFalse(repo.state.value.authenticated)
-            assertTrue(repo.state.value.sessions.isEmpty())
-            assertEquals(fixture.origin,fixture.requests.last { it.path == "/workbench/api/logout" }.origin)
-            assertEquals("${fixture.cookieName}=${fixture.cookieSecret}",fixture.requests.last { it.path == "/workbench/api/logout" }.cookie)
-            val jar = PinnedCookies(PinnedSecrets(context),fixture.origin,fixture.fingerprint)
-            assertTrue(jar.loadForRequest("${fixture.browserEndpoint}api/ws".toHttpUrl()).isEmpty())
-            assertFalse(transport.http(fixture.browserEndpoint,"session").getBoolean("authenticated"))
-        } finally { dispose(repo,transport); fixture.close(); context.clear() }
+            assertEquals("setup", repo.state.value.status)
+            assertFalse(repo.state.value.authenticated)
+            assertTrue(repo.state.value.error.orEmpty().contains("wss", ignoreCase = true))
+            assertTrue(runCatching { repo.setEndpoint(fixture.legacyHttpsEndpoint) }.isFailure)
+            assertTrue(runCatching { repo.connectService(fixture.legacyHttpsEndpoint, fixture.serviceToken) }.isFailure)
+            assertTrue(fixture.requests.isEmpty())
+            assertTrue(fixture.frames.value.isEmpty())
+            assertEquals(0, fixture.upgrades.get())
+        } finally { dispose(repo, transport); fixture.close(); context.clear() }
     }
 
     @Test fun directPinnedWssStreamsSettlesReconnectsFromDurableCursorAndDoesNotReplayMessages() = runBlocking {
@@ -287,7 +230,6 @@ class NativeTlsIntegrationTest {
         val repo = WorkbenchRepository(transport)
         try {
             repo.setFingerprint(fixture.serviceEndpoint,"00".repeat(32))
-            assertTrue(runCatching { transport.http(fixture.browserEndpoint,"session") }.exceptionOrNull() is CertificateFailure)
             repo.connectService(fixture.serviceEndpoint,fixture.serviceToken)
             awaitState(repo) { it.status == "offline" }
             assertFalse(repo.state.value.authenticated)
@@ -315,7 +257,6 @@ class NativeTlsIntegrationTest {
         val repo = WorkbenchRepository(transport)
         try {
             assertEquals("",transport.fingerprint(fixture.serviceEndpoint))
-            assertTrue(runCatching { transport.http(fixture.browserEndpoint,"session") }.exceptionOrNull() is CertificateFailure)
             repo.connectService(fixture.serviceEndpoint,fixture.serviceToken)
             awaitState(repo) { it.status == "offline" }
             assertFalse(repo.state.value.authenticated)
@@ -326,7 +267,7 @@ class NativeTlsIntegrationTest {
         } finally { dispose(repo,transport); fixture.close(); context.clear() }
     }
 
-    @Test fun switchingOriginsDoesNotWaitForAnUnresponsivePreviousHttpsProbe() = runBlocking {
+    @Test fun switchingOriginsDoesNotWaitForAnUnresponsivePreviousWssUpgrade() = runBlocking {
         val context = isolatedContext()
         val slow = TlsWorkbench()
         val next = TlsWorkbench()
@@ -334,21 +275,22 @@ class NativeTlsIntegrationTest {
         val repo = WorkbenchRepository(transport)
         val entered = CountDownLatch(1)
         val release = CountDownLatch(1)
-        slow.sessionProbeBlock = entered to release
+        slow.upgradeBlock = entered to release
         try {
-            repo.setFingerprint(slow.browserEndpoint,slow.fingerprint)
-            repo.setFingerprint(next.browserEndpoint,next.fingerprint)
-            val previousChoice = async { repo.setEndpoint(slow.browserEndpoint) }
-            withContext(Dispatchers.IO) { assertTrue("The first TLS probe must be in flight",entered.await(5,TimeUnit.SECONDS)) }
-            withTimeout(2_500) { repo.setEndpoint(next.browserEndpoint) }
-            assertEquals(next.browserEndpoint,repo.state.value.endpoint)
-            assertEquals("login",repo.state.value.status)
-            assertFalse("The first server must still be blocked",previousChoice.isCompleted)
-            assertEquals(1,next.requests.count { it.path == "/workbench/api/session" })
+            repo.setFingerprint(slow.serviceEndpoint, slow.fingerprint)
+            repo.setFingerprint(next.serviceEndpoint, next.fingerprint)
+            repo.connectService(slow.serviceEndpoint, slow.serviceToken)
+            withContext(Dispatchers.IO) { assertTrue("The first TLS upgrade must be in flight", entered.await(5, TimeUnit.SECONDS)) }
+            withTimeout(2_500) { repo.connectService(next.serviceEndpoint, next.serviceToken) }
+            awaitState(repo) { it.status == "online" }
+            assertEquals(next.serviceEndpoint, repo.state.value.endpoint)
+            assertEquals(1L, release.count)
+            assertEquals(1, next.requests.count { it.path == "/ws" })
             release.countDown()
-            previousChoice.await()
-            assertEquals(next.browserEndpoint,repo.state.value.endpoint)
-            assertEquals("login",repo.state.value.status)
-        } finally { release.countDown(); dispose(repo,transport); slow.close(); next.close(); context.clear() }
+            delay(300)
+            assertEquals(next.serviceEndpoint, repo.state.value.endpoint)
+            assertEquals("online", repo.state.value.status)
+            assertTrue("The superseded connection must not receive authentication", slow.frames.value.isEmpty())
+        } finally { release.countDown(); dispose(repo, transport); slow.close(); next.close(); context.clear() }
     }
 }

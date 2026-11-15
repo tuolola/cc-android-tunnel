@@ -17,7 +17,6 @@ import android.view.inputmethod.EditorInfo
 import androidx.appcompat.widget.AppCompatEditText
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.semantics.*
@@ -27,16 +26,18 @@ import kotlin.math.ceil
 import kotlin.math.floor
 
 /** System editor preserves Android selection handles, IME composition and the native context menu. */
-@Composable internal fun NativeComposer(value:String,onChange:(String)->Unit,placeholder:String,enabled:Boolean,modifier:Modifier=Modifier,onFocusChange:(Boolean)->Unit={}) {
+@Composable internal fun NativeComposer(value:String,onChange:(String)->Unit,placeholder:String,enabled:Boolean,modifier:Modifier=Modifier,onFocusChange:(Boolean)->Unit={},focusRequest:Int=0) {
     val colors=LocalDeskColors.current
     val context=LocalContext.current
-    val configuration=LocalConfiguration.current
-    // AndroidView survives uiMode changes. A TextView retains its constructor's ColorStateList,
-    // so resolve the current AppCompat default without replacing the live editor/Editable.
-    val hintColors=remember(context,configuration.uiMode){AppCompatEditText(context).hintTextColors}
     val change by rememberUpdatedState(onChange)
     val focusChange by rememberUpdatedState(onFocusChange)
     val editor=remember{arrayOfNulls<ComposerEditText>(1)}
+    var consumedFocusRequest by remember{mutableIntStateOf(0)}
+    LaunchedEffect(focusRequest,enabled){
+        if(focusRequest>consumedFocusRequest&&enabled){
+            editor[0]?.let{view->consumedFocusRequest=focusRequest;view.requestFocus();view.post{(context.getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager).showSoftInput(view,android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)}}
+        }
+    }
     var hasFocus by remember{mutableStateOf(false)}
     AndroidView(modifier=modifier.semantics {
         contentDescription=placeholder
@@ -58,7 +59,7 @@ import kotlin.math.floor
     }},update={view->
         view.contentDescription=placeholder;view.hint=placeholder
         view.setTextColor(colors.foreground.toArgb())
-        if(view.hintTextColors!==hintColors)view.setHintTextColor(hintColors)
+        view.setHintTextColor(colors.mutedForeground.toArgb())
         view.isEnabled=enabled
         if(view.text.toString()!=value){view.setText(value);view.setSelection(view.text?.length ?: 0)}
     })

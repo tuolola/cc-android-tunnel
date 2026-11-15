@@ -27,6 +27,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.ccdesk.nativeapp.core.Catalog
 import dev.ccdesk.nativeapp.core.ModelInfo
+import dev.ccdesk.nativeapp.core.WorkbenchRepository
 import kotlinx.coroutines.CompletableDeferred
 import org.junit.Assert.*
 import org.junit.Rule
@@ -121,25 +122,44 @@ class SecondaryInteractionTest {
         compose.waitUntil { dismissals.size == 1 }
     }
 
-    @Test fun failedAutomaticCatalogReadIsNotRepeatedOnReopenButManualRetryWorks() {
+    @Test fun openingModelSheetDoesNotFetchAndFailedManualReadCanBeRetried() {
         val reads = CopyOnWriteArrayList<Unit>()
         val visible = mutableStateOf(true)
-        val attempted = mutableStateOf(false)
         val catalog = Catalog(listOf(ModelInfo("model-a", "Model A", emptyList())), "2000-01-01T00:00:00Z")
         compose.setContent {
             DeskTheme {
                 if (visible.value) ModelSheet("model-a", null, catalog, null, "", false, { visible.value = false },
-                    onSave = { _, _ -> }, onLoad = { reads += Unit; error("Catalog temporarily unavailable") }, createsSession = false,
-                    autoReadAllowed = !attempted.value, onAutoRead = { attempted.value = true })
+                    onSave = { _, _ -> }, onLoad = { reads += Unit; error("Catalog temporarily unavailable") }, createsSession = false)
             }
         }
+        compose.waitForIdle()
+        assertTrue(reads.isEmpty())
+        compose.onNodeWithText("刷新服务端模型").performClick()
         compose.waitUntil { reads.size == 1 }
         compose.onNodeWithContentDescription("关闭模型面板").performClick()
-        compose.runOnIdle { assertTrue(attempted.value); visible.value = true }
+        compose.runOnIdle { visible.value = true }
         compose.waitForIdle()
         compose.runOnIdle { assertEquals(1, reads.size) }
         compose.onNodeWithText("刷新服务端模型").performClick()
         compose.waitUntil { reads.size == 2 }
+    }
+
+    @Test fun modelSheetNeverShowsFallbackAliasesAndDisplaysOnlyReceivedModels() {
+        val catalog = mutableStateOf<Catalog?>(null)
+        val loading = mutableStateOf(true)
+        compose.setContent { DeskTheme {
+            ModelSheet(null, null, catalog.value, null, "", false, {}, onSave = { _, _ -> },
+                onLoad = {}, createsSession = false, catalogLoading = loading.value)
+        } }
+        for (alias in listOf("Opus", "Sonnet", "Haiku", "通用模型别名")) compose.onNodeWithText(alias).assertDoesNotExist()
+        compose.onNodeWithText("正在读取模型…").assertIsNotEnabled()
+        compose.runOnIdle {
+            catalog.value = Catalog(listOf(ModelInfo("real-provider-model", "Real provider model", listOf("high"))), "2026-11-15T00:00:00Z")
+            loading.value = false
+        }
+        compose.onNodeWithText("Real provider model").assertIsDisplayed()
+        compose.onNodeWithText("刷新服务端模型").assertIsEnabled()
+        for (alias in listOf("Opus", "Sonnet", "Haiku")) compose.onNodeWithText(alias).assertDoesNotExist()
     }
 
     @Test fun entryFadeUsesBaselineMidpointAndRemovesWithoutAnExitFade() {
@@ -169,11 +189,11 @@ class SecondaryInteractionTest {
         compose.onNodeWithTag("fade-entry").assertDoesNotExist()
     }
 
-    @Test fun settingsDismissesFromItsDimMarginButNotFromInsideThePanel() {
+    @Test fun fullPageSettingsConsumesEdgeTouchesAndReturnsThroughItsHeader() {
         val dismissals = CopyOnWriteArrayList<Unit>()
         compose.setContent {
             DeskTheme {
-                Box(Modifier.fillMaxSize().testTag("settings-root")) {
+                Box(Modifier.size(360.dp, 640.dp).testTag("settings-root")) {
                     SettingsPanel("settings", "Settings", {}, { dismissals += Unit }) { SNativeText("Panel contents") }
                 }
             }
@@ -182,7 +202,45 @@ class SecondaryInteractionTest {
         root.performTouchInput { click(center) }
         compose.runOnIdle { assertTrue(dismissals.isEmpty()) }
         root.performTouchInput { click(Offset(4f, centerY)) }
+        compose.runOnIdle { assertTrue("The full-page surface must not expose a dismissible dim margin", dismissals.isEmpty()) }
+        compose.onNodeWithContentDescription("返回").assertHasClickAction().performClick()
         compose.runOnIdle { assertEquals(1, dismissals.size) }
+    }
+
+    @Test fun settingsSearchFindsConnectionByCredentialKeywordAndNavigatesToTheRealPage() {
+        val destinations = CopyOnWriteArrayList<String>()
+        compose.setContent {
+            DeskTheme { SettingsPanel("settings", "设置", { destinations += it }, {}) { SNativeText("Settings overview") } }
+        }
+        val searchField = compose.onNodeWithContentDescription("搜索设置")
+        searchField.performTextInput("凭据")
+        searchField.assertTextEquals("凭据")
+        try {
+            // The native ScrollView owns a nested ComposeView, whose result rows can
+            // attach after the outer text field has already reached Compose idleness.
+            compose.waitUntil(5_000) {
+                compose.onAllNodesWithContentDescription("打开设置：连接设置").fetchSemanticsNodes().isNotEmpty()
+            }
+        } catch (failure: Throwable) {
+            val roots = compose.onAllNodes(isRoot(), useUnmergedTree = true)
+            roots.fetchSemanticsNodes().indices.forEach { index -> println("Settings search root $index:\n${roots[index].printToString(maxDepth = 20)}") }
+            throw failure
+        }
+        compose.onNodeWithContentDescription("打开设置：连接设置").assertExists().performClick()
+        compose.runOnIdle { assertEquals(listOf("connection"), destinations.toList()) }
+    }
+
+    @Test fun avatarSettingsRetainsConnectionWithoutTheRemovedChatAndProjectEntries() {
+        val repository = WorkbenchRepository(FixtureTransport())
+        val destinations = CopyOnWriteArrayList<String>()
+        try {
+            compose.setContent { DeskTheme { SecondaryScreen("settings", repository, { destinations += it }, {}) } }
+            compose.waitUntil(5_000) { compose.onAllNodesWithContentDescription("打开连接设置").fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithContentDescription("打开聊天列表").assertDoesNotExist()
+            compose.onNodeWithContentDescription("打开项目会话").assertDoesNotExist()
+            compose.onNodeWithContentDescription("打开连接设置").assertIsDisplayed().performClick()
+            compose.runOnIdle { assertEquals(listOf("connection"), destinations.toList()) }
+        } finally { compose.runOnIdle { repository.dispose() } }
     }
 
     @Test fun modelCloseAcceptsOnlyItsFiveDpHitSlopWithoutChangingLayout() {

@@ -1,6 +1,7 @@
 package dev.ccdesk.nativeapp.ui
 
 import android.view.View
+import android.graphics.Rect
 import android.view.ViewGroup
 import android.widget.ScrollView
 import android.widget.TextView
@@ -52,7 +53,7 @@ class OpenSourceScreenTest {
             for ((title, resource) in documents) {
                 val expected = resources.openRawResource(resource).bufferedReader(Charsets.UTF_8).use { it.readText() }
                 assertTrue("A bundled document must contain real text", expected.isNotBlank())
-                compose.onNodeWithContentDescription("查看$title").performClick()
+                revealInNativeScroll(compose.onNodeWithContentDescription("查看$title")).performClick()
                 compose.onNodeWithText(title).assertIsDisplayed()
                 compose.waitUntil(5_000) {
                     var completeAndSelectable = false
@@ -77,6 +78,28 @@ class OpenSourceScreenTest {
     private fun activity() = ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(Stage.RESUMED)
         .filterIsInstance<ComponentActivity>().single()
 
+    /** Rounded settings rows can extend past the viewport; exercise the real native scroll. */
+    private fun revealInNativeScroll(node: SemanticsNodeInteraction): SemanticsNodeInteraction {
+        compose.runOnIdle { views().filterIsInstance<ScrollView>().single().scrollTo(0, 0) }
+        repeat(40) {
+            compose.waitForIdle()
+            val bounds = node.fetchSemanticsNode().boundsInWindow
+            var visible = false
+            compose.runOnIdle {
+                val scroll = views().filterIsInstance<ScrollView>().single()
+                val location = IntArray(2)
+                scroll.getLocationInWindow(location)
+                val viewport = Rect()
+                check(scroll.getLocalVisibleRect(viewport))
+                viewport.offset(location[0] - scroll.scrollX, location[1] - scroll.scrollY)
+                visible = bounds.top >= viewport.top && bounds.bottom <= viewport.bottom
+                if (!visible) scroll.scrollBy(0, (scroll.height / 3).coerceAtLeast(1))
+            }
+            if (visible) return node.assertIsDisplayed()
+        }
+        error("Cannot reveal the requested license row")
+    }
+
     private fun views(): List<View> = buildList {
         fun visit(view: View) { add(view); if (view is ViewGroup) for (i in 0 until view.childCount) visit(view.getChildAt(i)) }
         visit(activity().window.decorView)
@@ -94,9 +117,8 @@ class OpenSourceScreenTest {
         override suspend fun fingerprint(endpoint: String): String = unused()
         override suspend fun setFingerprint(endpoint: String, fingerprint: String): Unit = unused()
         override suspend fun clearOrigin(endpoint: String): Unit = unused()
-        override suspend fun clearBrowserSession(endpoint: String): Unit = unused()
-        override suspend fun http(endpoint: String, route: String, body: JSONObject?): JSONObject = unused()
-        override suspend fun socket(endpoint: String, direct: Boolean, observer: SocketObserver): SocketConnection = unused()
+
+        override suspend fun socket(endpoint: String, observer: SocketObserver): SocketConnection = unused()
         override fun close() {}
     }
 }

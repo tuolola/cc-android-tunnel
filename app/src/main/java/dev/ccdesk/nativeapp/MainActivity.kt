@@ -48,10 +48,9 @@ class MainActivity : ComponentActivity() {
         val uri = intent?.data ?: return
         if (intent.action != Intent.ACTION_VIEW || uri.scheme != "cc-android-tunnel") return
         val route = (uri.host.orEmpty() + uri.path.orEmpty()).trim('/')
-        if (route in setOf("", "settings", "connection", "usage", "access", "notifications", "help", "chats")) model.requestedRoute = route
+        if (route in setOf("", "settings", "connection", "usage", "access", "notifications", "help", "remote")) model.requestedRoute = route
     }
     override fun onConfigurationChanged(newConfig: Configuration) { super.onConfigurationChanged(newConfig); enableEdgeToEdge() }
     override fun onStart() { super.onStart(); model.repository.foreground(true); model.viewModelScope.launch { model.updates.check() } }
     override fun onStop() { model.repository.foreground(false); super.onStop() }
-    override fun onUserInteraction() { super.onUserInteraction(); model.repository.activity() }
 }

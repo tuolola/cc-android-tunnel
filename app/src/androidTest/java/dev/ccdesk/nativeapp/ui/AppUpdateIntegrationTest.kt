@@ -19,8 +19,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -114,16 +112,16 @@ class AppUpdateIntegrationTest {
             scrollToNative(compose.onNodeWithTag("app-update-download")).assertIsEnabled().assertHasClickAction()
             scrollToNative(compose.onNodeWithTag("app-update-release")).assertIsEnabled().assertHasClickAction()
 
-            tab("帮助").performScrollTo().performClick()
+            compose.onNodeWithContentDescription("关于与帮助").performClick()
             compose.runOnIdle { assertEquals("help", route.value) }
             compose.onNodeWithTag("app-update-card").assertDoesNotExist()
-            tab("概览").performScrollTo().performClick()
+            compose.onNodeWithContentDescription("返回设置").performClick()
             compose.runOnIdle { assertEquals("settings", route.value) }
             scrollToNative(compose.onNodeWithTag("app-update-automatic")).assertIsOff()
             scrollToNative(compose.onNodeWithTag("app-update-prereleases")).assertIsOn()
             compose.onNodeWithTag("app-update-status").assertTextEquals("发现新版本 9.2.0")
 
-            compose.onNodeWithContentDescription("关闭").performClick()
+            compose.onNodeWithContentDescription("返回").performClick()
             compose.onNodeWithTag("app-update-card").assertDoesNotExist()
             compose.onNodeWithText("Reopen settings").performClick()
             scrollToNative(compose.onNodeWithTag("app-update-automatic")).assertIsOff()
@@ -171,8 +169,6 @@ class AppUpdateIntegrationTest {
             compose.runOnIdle { workbench.dispose(); updates.dispose() }
         }
     }
-
-    private fun tab(label: String) = compose.onNode(hasText(label) and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab))
 
     /**
      * Do not treat boundsInRoot as ScrollView content coordinates: the nested ComposeView
@@ -244,6 +240,7 @@ class AppUpdateIntegrationTest {
 
     private fun screenTarget(node: SemanticsNodeInteraction): ScreenTarget {
         val semantics = node.fetchSemanticsNode()
+        val search = compose.onAllNodesWithContentDescription("搜索设置").fetchSemanticsNodes().firstOrNull()
         var result: ScreenTarget? = null
         compose.runOnIdle {
             // LayoutCoordinates and AndroidComposeView's cached transform matrices are
@@ -265,6 +262,9 @@ class AppUpdateIntegrationTest {
             // Subtract it before translating to screen pixels; otherwise the viewport
             // incorrectly moves down with the content and accepts offscreen targets.
             viewport.offset(scrollOnScreen[0] - scroll.scrollX, scrollOnScreen[1] - scroll.scrollY)
+            // The fixed search pill overlays the scrolling settings content. A target
+            // underneath it is not touchable even though ScrollView considers it visible.
+            search?.let { viewport.bottom = minOf(viewport.bottom, (it.boundsInWindow.top + offsetY).toInt()) }
             result = ScreenTarget(RectF(bounds.left + offsetX, bounds.top + offsetY, bounds.right + offsetX, bounds.bottom + offsetY), viewport, scroll.scrollY)
         }
         return requireNotNull(result)
@@ -306,7 +306,7 @@ class AppUpdateIntegrationTest {
         runBlocking {
             withContext(Dispatchers.Main.immediate) {
                 repository.foreground(false) // Prevent automatic retries of the deliberately rejected fixture probe.
-                runCatching { repository.setEndpoint("https://offline.invalid") }
+                runCatching { repository.setEndpoint("wss://offline.invalid/ws") }
                 assertEquals("offline", repository.state.value.status)
             }
         }
@@ -324,28 +324,27 @@ class AppUpdateIntegrationTest {
         override fun write(value: String) { this.value = value }
     }
 
-    /** No disk, credentials, cookies, sockets or actual HTTP are accessible to these settings fixtures. */
+    /** Synthetic service credentials only; no disk or network is accessible to these settings fixtures. */
     private class NoNetworkTransport : WorkbenchTransport {
         var probes = 0
         var forbiddenCalls = 0
         private fun forbidden(): Nothing { forbiddenCalls++; error("Integration fixture must not access credentials, persistence or networking") }
         override suspend fun getEndpoint(): String = forbidden()
-        override suspend fun setEndpoint(endpoint: String) { check(endpoint == "https://offline.invalid/") }
-        override suspend fun readPreferences(endpoint: String): Preferences = forbidden()
+        override suspend fun setEndpoint(endpoint: String) { check(endpoint == "wss://offline.invalid/ws") }
+        override suspend fun readPreferences(endpoint: String) = Preferences()
         override suspend fun writePreferences(endpoint: String, preferences: Preferences): Unit = forbidden()
-        override suspend fun credential(endpoint: String): String = forbidden()
+        override suspend fun credential(endpoint: String) = "offline-fixture-service-token-0123456789"
         override suspend fun saveCredential(endpoint: String, credential: String): Unit = forbidden()
-        override suspend fun deviceId(): String = forbidden()
+        override suspend fun deviceId() = "offline-fixture-device"
         override suspend fun fingerprint(endpoint: String): String = forbidden()
         override suspend fun setFingerprint(endpoint: String, fingerprint: String): Unit = forbidden()
         override suspend fun clearOrigin(endpoint: String): Unit = forbidden()
-        override suspend fun clearBrowserSession(endpoint: String): Unit = forbidden()
-        override suspend fun http(endpoint: String, route: String, body: JSONObject?): JSONObject {
-            check(endpoint == "https://offline.invalid/" && route == "session" && body == null)
+
+        override suspend fun socket(endpoint: String, observer: SocketObserver): SocketConnection {
+            check(endpoint == "wss://offline.invalid/ws")
             probes++
             throw IOException("Offline workbench fixture")
         }
-        override suspend fun socket(endpoint: String, direct: Boolean, observer: SocketObserver): SocketConnection = forbidden()
         override fun close() {}
     }
 }

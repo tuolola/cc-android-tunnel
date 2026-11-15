@@ -16,6 +16,7 @@ __pycache__/
 *.jks
 *.keystore
 /artifacts/
+/.tmp/
 
 # Local AI instructions, plans and verification artifacts
 /.local/

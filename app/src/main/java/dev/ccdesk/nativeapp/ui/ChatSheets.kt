@@ -42,11 +42,9 @@ import androidx.compose.ui.unit.sp
 import dev.ccdesk.nativeapp.core.*
 import kotlinx.coroutines.launch
 import org.json.JSONObject
-import java.time.Instant
 
 val effortNames=linkedMapOf("low" to "低","medium" to "中","high" to "高","xhigh" to "很高","max" to "最大")
 internal val permissionNames:Map<String,String> = linkedMapOf("auto" to "自动","default" to "标准审批","plan" to "计划模式","acceptEdits" to "自动接受编辑","bypassPermissions" to "跳过审批")
-private val aliases=listOf(ModelInfo("opus","Opus",description="适合复杂推理与深入分析"),ModelInfo("sonnet","Sonnet",description="兼顾推理能力与响应速度"),ModelInfo("haiku","Haiku",description="适合快速回答与简短任务"))
 private val modelPages=mapOf("models" to 0,"more" to 1,"custom" to 2)
 
 /**
@@ -54,7 +52,7 @@ private val modelPages=mapOf("models" to 0,"more" to 1,"custom" to 2)
  * returns to the previous page before closing. While a save is pending the sheet cannot be
  * dismissed by back, scrim, drag or its close button.
  */
-@Composable fun ModelSheet(model:String?,effort:String?,catalog:Catalog?,defaultModel:String?,nativeModel:String,disabled:Boolean,close:()->Unit,onSave:suspend(String?,String?)->Unit,onLoad:(suspend()->Unit)?,createsSession:Boolean,autoReadAllowed:Boolean=true,onAutoRead:()->Unit={},visible:Boolean=true,lockedReason:String=""){
+@Composable fun ModelSheet(model:String?,effort:String?,catalog:Catalog?,defaultModel:String?,nativeModel:String,disabled:Boolean,close:()->Unit,onSave:suspend(String?,String?)->Unit,onLoad:(suspend()->Unit)?,createsSession:Boolean,visible:Boolean=true,lockedReason:String="",catalogLoading:Boolean=false,catalogError:String?=null){
     val c=LocalDeskColors.current
     val scope=rememberCoroutineScope()
     val keyboard=LocalSoftwareKeyboardController.current
@@ -66,15 +64,16 @@ private val modelPages=mapOf("models" to 0,"more" to 1,"custom" to 2)
     var saving by remember{mutableStateOf(false)}
     var loading by remember{mutableStateOf(false)}
     val models=catalog?.models.orEmpty()
-    val shown=if(models.isEmpty())aliases else models.filter{it.value.isNotEmpty()&&it.value!="default"}.distinctBy{it.value}
+    val shown=models.filter{it.value.isNotEmpty()&&it.value!="default"}.distinctBy{it.value}
     val chosen=modelForChoice(models,model,defaultModel,nativeModel)
     val default=modelForChoice(models,null,defaultModel,nativeModel)
-    val levels=if(chosen!=null)effortNames.keys.filter{it in chosen.supportedEffortLevels}else effortNames.keys.toList()
+    val levels=effortNames.keys.filter{it in chosen?.supportedEffortLevels.orEmpty()}
+    val reading=loading||catalogLoading
     val locked=disabled||saving
     fun dismiss(){if(!saving){keyboard?.hide();close()}}
     fun back(){if(!saving)if(page=="custom"){keyboard?.hide();page="more";error=""}else if(page=="more"){page="models";error=""}else dismiss()}
     fun refresh(){
-        if(onLoad==null||disabled||saving||loading)return
+        if(onLoad==null||disabled||saving||reading)return
         loading=true;error=""
         scope.launch{try{onLoad()}catch(e:kotlinx.coroutines.CancellationException){throw e}catch(e:Exception){error=e.message?:"操作失败，请重试。"}finally{loading=false}}
     }
@@ -88,18 +87,15 @@ private val modelPages=mapOf("models" to 0,"more" to 1,"custom" to 2)
     LaunchedEffect(visible){
         if(!visible)return@LaunchedEffect
         page="models";error="";custom=model.orEmpty()
-        val recent=runCatching{java.time.Duration.between(Instant.parse(catalog?.at),Instant.now()).toMillis()<300_000}.getOrDefault(false)
-        if(onLoad!=null&&!disabled&&!createsSession&&!recent&&autoReadAllowed){onAutoRead();refresh()}
     }
-    val readLabel=if(loading)"正在读取模型…"else if(createsSession)"新建会话并读取模型"else if(models.isNotEmpty())"刷新服务端模型"else "读取服务端模型"
-    val readDetail=if(createsSession)"将在工作台创建空会话，不发送消息。"else ""
+    val readLabel=if(reading)"正在读取模型…"else if(models.isNotEmpty())"刷新服务端模型"else "重试读取模型"
     DeskSheetOverlay(visible,{dismiss()},dismissible=!saving,onBack={back()},maxWidth=640.dp,heightFraction=.85f){sheet->
         Column(Modifier.fillMaxWidth().then(sheet.dragHandle)){
             SheetGrabber()
-            Row(Modifier.fillMaxWidth().heightIn(min=40.dp).padding(start=if(page=="models")20.dp else 8.dp,end=12.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)){
+            Row(Modifier.fillMaxWidth().heightIn(min=48.dp).padding(start=if(page=="models")24.dp else 8.dp,end=12.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)){
                 AnimatedVisibility(page!="models",enter=fadeIn(DeskMotion.fadeIn())+expandHorizontally(DeskMotion.layoutSize),exit=fadeOut(DeskMotion.fadeOut())+shrinkHorizontally(DeskMotion.layoutSize)){ModelHeaderButton("arrow-left","返回模型菜单",40,20,true,hitSlop=3){back()}}
                 AnimatedContent(page,Modifier.weight(1f),transitionSpec={fadeIn(DeskMotion.fadeIn())togetherWith fadeOut(DeskMotion.fadeOut())},label="model title"){p->
-                    SNativeText(when(p){"custom"->"自定义模型";"more"->"更多模型";else->"模型"},Modifier.semantics{heading()},size=13,color=c.mutedForeground,weight=FontWeight.SemiBold,heading=true)
+                    SNativeText(when(p){"custom"->"自定义模型";"more"->"更多模型";else->"模型"},Modifier.semantics{heading()},size=18,lineHeight=26,color=c.foreground,weight=FontWeight.SemiBold,heading=true)
                 }
                 ModelHeaderButton("x","关闭模型面板",32,16,!saving,c.mutedForeground,hitSlop=5){dismiss()}
             }
@@ -108,15 +104,16 @@ private val modelPages=mapOf("models" to 0,"more" to 1,"custom" to 2)
             val forward=(modelPages[targetState]?:0)>(modelPages[initialState]?:0)
             (slideInHorizontally(DeskMotion.contentOffset){if(forward)it/4 else -it/4}+fadeIn(DeskMotion.fadeIn()))togetherWith(slideOutHorizontally(DeskMotion.contentOffset){if(forward)-it/4 else it/4}+fadeOut(DeskMotion.fadeOut()))
         },label="model page"){p->
-            NativeScrollContent(Modifier.fillMaxSize(),PaddingValues(start=8.dp,end=8.dp,top=2.dp,bottom=10.dp),0.dp){
+            NativeScrollContent(Modifier.fillMaxSize(),PaddingValues(start=12.dp,end=12.dp,top=4.dp,bottom=16.dp),0.dp){
                 if(p=="models"){
                     if(disabled&&lockedReason.isNotEmpty())SNativeText(lockedReason,Modifier.padding(horizontal=12.dp).padding(top=2.dp,bottom=8.dp),size=13,lineHeight=18,color=c.mutedForeground)
                     ModelRow("使用服务端默认模型",listOf(modelName(default).ifEmpty{defaultModel?:nativeModel},default?.resolvedModel.orEmpty()).filter{it.isNotEmpty()}.distinct().joinToString(" · "),model==null,locked){select(null)}
-                    if(models.isEmpty())SNativeText("通用模型别名",Modifier.padding(horizontal=12.dp).padding(top=8.dp),size=13,color=c.mutedForeground)
+                    if(models.isEmpty())SNativeText(when{reading->"正在获取服务端模型列表…";!catalogError.isNullOrEmpty()->catalogError;createsSession->"创建首个会话后将自动获取模型列表。";else->"尚未获取模型列表，连接成功且有空闲会话时将自动读取。"},Modifier.padding(horizontal=12.dp).padding(top=8.dp).semantics{liveRegion=LiveRegionMode.Polite},size=13,color=c.mutedForeground)
+                    else if(!catalogError.isNullOrEmpty())SNativeText("刷新失败，显示上次读取的模型列表。$catalogError",Modifier.padding(horizontal=12.dp).padding(top=8.dp),size=13,color=c.mutedForeground)
                 }
                 if(p!="custom"){
                     shown.forEach{row->ModelRow(modelName(row),listOf(row.resolvedModel?.takeIf{it.isNotEmpty()}?:row.value.takeIf{models.isNotEmpty()&&it!=row.displayName}.orEmpty(),row.description.orEmpty()).filter{it.isNotEmpty()}.joinToString(" · "),model!=null&&(chosen?.value==row.value||model==row.value),locked){select(row.value)}}
-                    if(p=="models"&&onLoad!=null)ModelRow(readLabel,readDetail,disabled=locked||loading,compact=true,icon="rotate-cw",loading=loading){refresh()}
+                    if(p=="models"&&onLoad!=null)ModelRow(readLabel,disabled=locked||reading,compact=true,icon="rotate-cw",loading=reading){refresh()}
                     if(p=="models"){
                         if(model!=null&&chosen==null&&modelForChoice(shown,model)==null)ModelRow(model,"当前自定义模型",true,locked){select(model)}
                         ModelDivider()
@@ -128,7 +125,7 @@ private val modelPages=mapOf("models" to 0,"more" to 1,"custom" to 2)
                     }else{
                         if(shown.isNotEmpty())ModelDivider()
                         ModelRow("自定义模型标识",compact=true,icon="pencil",trailing=true){custom=model.orEmpty();page="custom";error=""}
-                        if(onLoad!=null)ModelRow(readLabel,readDetail,disabled=locked||loading,compact=true,icon="rotate-cw",loading=loading){refresh()}
+                        if(onLoad!=null)ModelRow(readLabel,disabled=locked||reading,compact=true,icon="rotate-cw",loading=reading){refresh()}
                     }
                 }else Column(Modifier.padding(horizontal=12.dp).padding(top=8.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
                     ModelCustomField(custom,{custom=it},!locked){if(custom.isNotBlank())select(custom.trim())}
@@ -172,12 +169,12 @@ private val modelPages=mapOf("models" to 0,"more" to 1,"custom" to 2)
     DeskSheetOverlay(visible,{dismiss()},dismissible=!busy,onBack={dismiss()},maxWidth=640.dp,heightFraction=.85f,scrimLabel="关闭权限模式选择器"){sheet->
         Column(Modifier.fillMaxWidth().then(sheet.dragHandle)){
             SheetGrabber()
-            Row(Modifier.fillMaxWidth().heightIn(min=40.dp).padding(start=20.dp,end=12.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)){
-                SNativeText("权限模式",Modifier.weight(1f).semantics{heading()},size=13,color=c.mutedForeground,weight=FontWeight.SemiBold,heading=true)
+            Row(Modifier.fillMaxWidth().heightIn(min=48.dp).padding(start=24.dp,end=12.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)){
+                SNativeText("权限模式",Modifier.weight(1f).semantics{heading()},size=18,lineHeight=26,color=c.foreground,weight=FontWeight.SemiBold,heading=true)
                 ModelHeaderButton("x","关闭权限面板",32,16,!busy,c.mutedForeground,hitSlop=5){dismiss()}
             }
         }
-        NativeScrollContent(Modifier.weight(1f).fillMaxWidth(),PaddingValues(start=8.dp,end=8.dp,top=2.dp,bottom=10.dp),0.dp){
+        NativeScrollContent(Modifier.weight(1f).fillMaxWidth(),PaddingValues(start=12.dp,end=12.dp,top=4.dp,bottom=16.dp),0.dp){
             DeskExpandable(notice.isNotEmpty()){
                 SNativeText(shownNotice,Modifier.padding(horizontal=12.dp).padding(top=2.dp,bottom=8.dp),size=13,lineHeight=18,color=c.mutedForeground)
             }
@@ -253,16 +250,16 @@ private val modelPages=mapOf("models" to 0,"more" to 1,"custom" to 2)
     val interaction=remember{MutableInteractionSource()};val pressed by interaction.pressedState()
     val highlight=animatedHighlight(pressed&&!disabled,false,c.muted)
     val alpha=animatedEnabledAlpha(!disabled||loading,.5f)
-    Row(Modifier.fillMaxWidth().heightIn(min=if(compact)44.dp else 54.dp).graphicsLayer{this.alpha=alpha}.background(highlight,RoundedCornerShape(12.dp)).clickable(enabled=!disabled,interactionSource=interaction,indication=null,onClick=onClick).semantics(mergeDescendants=true){text=AnnotatedString(label);role=if(checked==null)Role.Button else Role.RadioButton;if(checked!=null)selected=checked;if(detail.isNotEmpty())contentDescription=label+"，"+detail}.padding(horizontal=12.dp,vertical=if(compact)6.dp else 7.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)){
+    Row(Modifier.fillMaxWidth().heightIn(min=if(compact)48.dp else 60.dp).graphicsLayer{this.alpha=alpha}.clip(RoundedCornerShape(20.dp)).background(highlight).clickable(enabled=!disabled,interactionSource=interaction,indication=null,onClick=onClick).semantics(mergeDescendants=true){text=AnnotatedString(label);role=if(checked==null)Role.Button else Role.RadioButton;if(checked!=null)selected=checked;if(detail.isNotEmpty())contentDescription=label+"，"+detail}.padding(horizontal=12.dp,vertical=if(compact)10.dp else 12.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(16.dp)){
         if(icon!=null)Box(Modifier.size(18.dp),contentAlignment=Alignment.Center){
             val spin by animateFloatAsState(if(loading)1f else 0f,DeskMotion.icon(),label="row loading")
             DeskIcon(icon,Modifier.graphicsLayer{this.alpha=1f-spin},size=18.dp)
             if(loading)Box(Modifier.graphicsLayer{this.alpha=spin}){DeskSpinner(label,18.dp)}
         }
-        Column(Modifier.weight(1f)){NativeSpanText(label,size=16,weight=500,lineHeight=21,selectable=false,exposeText=false);if(detail.isNotEmpty())NativeSpanText(detail,Modifier.padding(top=2.dp),size=13,color=c.mutedForeground,lineHeight=17,maxLines=2,selectable=false,exposeText=false)}
+        Column(Modifier.weight(1f)){NativeSpanText(label,size=16,weight=400,lineHeight=24,selectable=false,exposeText=false);if(detail.isNotEmpty())NativeSpanText(detail,Modifier.padding(top=2.dp),size=13,color=c.mutedForeground,lineHeight=19,maxLines=2,selectable=false,exposeText=false)}
         if(checked!=null){
             val mark by animateFloatAsState(if(checked)1f else 0f,DeskMotion.icon(),label="check")
-            if(checked||mark>.01f)DeskIcon("check",Modifier.graphicsLayer{scaleX=.4f+.6f*mark;scaleY=.4f+.6f*mark;this.alpha=mark.coerceIn(0f,1f)},size=19.dp,tint=Color(0xff5388c9),strokeWidth=2.4f)
+            if(checked||mark>.01f)DeskIcon("check",Modifier.graphicsLayer{scaleX=.4f+.6f*mark;scaleY=.4f+.6f*mark;this.alpha=mark.coerceIn(0f,1f)},size=20.dp,tint=Color(0xff3562f6),strokeWidth=2.2f)
         }else if(trailing)DeskIcon("chevron-right",size=16.dp,tint=c.mutedForeground)
     }
 }
@@ -272,11 +269,11 @@ private val modelPages=mapOf("models" to 0,"more" to 1,"custom" to 2)
     val c=LocalDeskColors.current
     Column(Modifier.fillMaxWidth(),verticalArrangement=Arrangement.spacedBy(8.dp)){
         if(title!=null)SNativeText(title,Modifier.padding(start=4.dp).semantics{heading()},size=13,lineHeight=18,color=c.mutedForeground,weight=FontWeight.Medium,heading=true)
-        if(card)Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(c.secondary),content=content)
+        if(card)Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).border(1.dp,c.border,RoundedCornerShape(28.dp)).background(c.card),content=content)
         else Column(Modifier.fillMaxWidth(),verticalArrangement=Arrangement.spacedBy(10.dp),content=content)
     }
 }
-@Composable internal fun GroupDivider(){Box(Modifier.padding(start=46.dp).fillMaxWidth().height(1.dp).background(LocalDeskColors.current.border.copy(alpha=.7f)))}
+@Composable internal fun GroupDivider(){Box(Modifier.fillMaxWidth().height(1.dp).background(LocalDeskColors.current.border))}
 
 /** Row inside a [SettingsGroup] card: highlight on press, smooth disabled state, spinner while its action runs. */
 @Composable internal fun SheetRow(icon:String,label:String,detail:String?=null,enabled:Boolean=true,loading:Boolean=false,chevron:Boolean=false,onClick:()->Unit){
@@ -284,13 +281,13 @@ private val modelPages=mapOf("models" to 0,"more" to 1,"custom" to 2)
     val interaction=remember{MutableInteractionSource()};val pressed by interaction.pressedState()
     val highlight=animatedHighlight(pressed&&enabled,false,c.accent)
     val alpha=animatedEnabledAlpha(enabled||loading)
-    Row(Modifier.fillMaxWidth().heightIn(min=48.dp).graphicsLayer{this.alpha=alpha}.background(highlight).clickable(enabled=enabled&&!loading,interactionSource=interaction,indication=null,onClick=onClick).semantics{text=AnnotatedString(label);role=Role.Button}.padding(horizontal=14.dp,vertical=10.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)){
-        Box(Modifier.size(20.dp),contentAlignment=Alignment.Center){
-            AnimatedContent(loading,transitionSpec={fadeIn(DeskMotion.fadeIn())togetherWith fadeOut(DeskMotion.fadeOut())},label="row icon"){busy->if(busy)DeskSpinner(label,18.dp)else DeskIcon(icon,size=18.dp,tint=c.mutedForeground,strokeWidth=1.7f)}
+    Row(Modifier.fillMaxWidth().heightIn(min=54.dp).graphicsLayer{this.alpha=alpha}.background(highlight).clickable(enabled=enabled&&!loading,interactionSource=interaction,indication=null,onClick=onClick).semantics{text=AnnotatedString(label);role=Role.Button}.padding(horizontal=16.dp,vertical=12.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(16.dp)){
+        Box(Modifier.size(22.dp),contentAlignment=Alignment.Center){
+            AnimatedContent(loading,transitionSpec={fadeIn(DeskMotion.fadeIn())togetherWith fadeOut(DeskMotion.fadeOut())},label="row icon"){busy->if(busy)DeskSpinner(label,20.dp)else DeskIcon(icon,size=22.dp,tint=c.foreground,strokeWidth=1.8f)}
         }
         Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(2.dp)){
-            NativeSpanText(label,size=15,lineHeight=21,selectable=false,exposeText=false)
-            if(detail!=null)NativeSpanText(detail,size=12,lineHeight=17,color=c.mutedForeground,selectable=false,exposeText=false)
+            NativeSpanText(label,size=16,lineHeight=24,selectable=false,exposeText=false)
+            if(detail!=null)NativeSpanText(detail,size=13,lineHeight=19,color=c.mutedForeground,selectable=false,exposeText=false)
         }
         if(chevron)DeskIcon("chevron-right",size=16.dp,tint=c.mutedForeground)
     }

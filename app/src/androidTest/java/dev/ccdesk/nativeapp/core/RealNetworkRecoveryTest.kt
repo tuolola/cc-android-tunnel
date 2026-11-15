@@ -275,7 +275,7 @@ class RealNetworkRecoveryTest {
         private val acknowledgedConnection=AtomicInteger()
         private val snapshotConnection=AtomicInteger()
         val currentSubscriptionRestored get()=connections.get().let{it>0&&acknowledgedConnection.get()==it&&snapshotConnection.get()==it}
-        override suspend fun socket(endpoint: String, direct: Boolean, observer: SocketObserver): SocketConnection {
+        override suspend fun socket(endpoint: String, observer: SocketObserver): SocketConnection {
             val connectionId=connections.incrementAndGet()
             val wrapped = object : SocketObserver {
                 override fun opened() = observer.opened()
@@ -295,7 +295,7 @@ class RealNetworkRecoveryTest {
                 override fun closed(code: Int, reason: String) = observer.closed(code,reason)
                 override fun failed(cause: Throwable) = observer.failed(cause)
             }
-            val connection = delegate.socket(endpoint,direct,wrapped)
+            val connection = delegate.socket(endpoint,wrapped)
             return object : SocketConnection {
                 override fun send(text: String): Boolean {
                     val frame = JSONObject(text)

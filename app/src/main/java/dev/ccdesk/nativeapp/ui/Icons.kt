@@ -4,7 +4,8 @@
 
 package dev.ccdesk.nativeapp.ui
 
-// Original Lucide paths exported from this repository's pinned baseline package (ISC).
+// Existing Lucide-compatible names stay available; the compact navigation and audio
+// glyphs below are drawn on the same 24-unit grid as the reference phone controls.
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.*
@@ -54,8 +55,31 @@ private val iconPaths=mapOf(
     "monitor-smartphone" to listOf("M18 8 V6 a2 2 0 0 0 -2 -2 H4 a2 2 0 0 0 -2 2 v7 a2 2 0 0 0 2 2 h8","M10 19 v-3.96 v3.15","M7 19 h5"),
     "refresh-cw" to listOf("M3 12 a9 9 0 0 1 9 -9 a9.75 9.75 0 0 1 6.74 2.74 L21 8","M21 3 v5 h-5","M21 12 a9 9 0 0 1 -9 9 a9.75 9.75 0 0 1 -6.74 -2.74 L3 16","M8 16 H3 v5"),
     "gauge" to listOf("m12 14 l4 -4","M3.34 19 a10 10 0 1 1 17.32 0"),
-    "menu" to listOf("M4 5 h16","M4 12 h16","M4 19 h16"),
+    "menu" to listOf("M4 8 h16","M4 16 h10"),
+    "sparkles" to listOf("M11 6 l1.7 5.3 L18 13 l-5.3 1.7 L11 20 l-1.7 -5.3 L4 13 l5.3 -1.7 Z","M20 2 v4","M18 4 h4","M4 2 v4","M2 4 h4"),
+    "mic" to listOf("M9 5 a3 3 0 0 1 6 0 v7 a3 3 0 0 1 -6 0 Z","M5 11 v1 a7 7 0 0 0 14 0 v-1","M12 19 v3"),
+    "audio-wave" to listOf("M5 10 v4","M9.5 5 v14","M14 7 v10","M18.5 10 v4"),
+    "library" to listOf("M3 4 h4 v16 H3 Z","M8 4 h4 v16 H8 Z","M14 4 l4 -1 l4 16 l-4 1 Z"),
+    "sliders" to listOf("M4 7 h6","M16 7 h4","M4 17 h2","M12 17 h8"),
+    "monitor" to listOf("M5 4 h14 a1 1 0 0 1 1 1 v9 H4 V5 a1 1 0 0 1 1 -1 Z","M3 14 h18 v2 a1 1 0 0 1 -1 1 H4 a1 1 0 0 1 -1 -1 Z"),
+    "images" to listOf("M9 6 V4 a2 2 0 0 1 2 -2 l8 1 a2 2 0 0 1 2 2 l-1 9 a2 2 0 0 1 -2 2 h-2","M5 8 l8 -1 a2 2 0 0 1 2 2 l1 9 a2 2 0 0 1 -2 2 l-8 1 a2 2 0 0 1 -2 -2 L3 10 a2 2 0 0 1 2 -2 Z","M4 17 l4 -4 l7 5"),
+    "grid-2x2" to listOf("M3 3 h7 v7 H3 Z","M3 14 h7 v7 H3 Z","M14 14 h7 v7 h-7 Z","M17.5 2 l4.5 4.5 l-4.5 4.5 L13 6.5 Z"),
+    "share-2" to listOf("M8 10 l8 -5","M8 14 l8 5"),
+    "volume-2" to listOf("M11 4 L6 8 H3 v8 h3 l5 4 Z","M15 8 a6 6 0 0 1 0 8","M18 5 a10 10 0 0 1 0 14"),
+    "thumbs-up" to listOf("M7 10 v11 H3 V10 Z","M7 10 l5 -8 a2 2 0 0 1 2 2 l-1 5 h5 a3 3 0 0 1 3 3 l-2 7 a3 3 0 0 1 -3 2 H7"),
+    "thumbs-down" to listOf("M7 14 V3 H3 v11 Z","M7 14 l5 8 a2 2 0 0 0 2 -2 l-1 -5 h5 a3 3 0 0 0 3 -3 l-2 -7 a3 3 0 0 0 -3 -2 H7"),
+    "text-select" to listOf("M4 3 h16","M12 3 v18","M8 21 h8","M4 3 v4","M20 3 v4"),
+    "file-text" to listOf("M6 3 h12 a2 2 0 0 1 2 2 v14 a2 2 0 0 1 -2 2 H6 a2 2 0 0 1 -2 -2 V5 a2 2 0 0 1 2 -2 Z","M8 8 h8","M8 12 h5"),
+    "camera" to listOf("M8 5 l1 -2 h6 l1 2 h3 a2 2 0 0 1 2 2 v12 a2 2 0 0 1 -2 2 H5 a2 2 0 0 1 -2 -2 V7 a2 2 0 0 1 2 -2 Z"),
+    "paperclip" to listOf("M6 8 v9 a6 6 0 0 0 12 0 V6 a4 4 0 0 0 -8 0 v10 a2 2 0 0 0 4 0 V7"),
+    "lock" to listOf("M7 9 V7 a5 5 0 0 1 10 0 v2","M5 9 h14 a2 2 0 0 1 2 2 v8 a2 2 0 0 1 -2 2 H5 a2 2 0 0 1 -2 -2 v-8 a2 2 0 0 1 2 -2 Z","M12 14 v3"),
+    "archive" to listOf("M4 3 h16 a1 1 0 0 1 1 1 v3 H3 V4 a1 1 0 0 1 1 -1 Z","M4 7 v12 a2 2 0 0 0 2 2 h12 a2 2 0 0 0 2 -2 V7","M10 12 h4"),
+    "trash-2" to listOf("M3 6 h18","M8 6 V5 a4 4 0 0 1 8 0 v1","M5 6 l1 14 a2 2 0 0 0 2 2 h8 a2 2 0 0 0 2 -2 l1 -14","M10 10 v7","M14 10 v7"),
+    "folder-plus" to listOf("M10 20 H5 a2 2 0 0 1 -2 -2 V5 a2 2 0 0 1 2 -2 h3 l3 3 h8 a2 2 0 0 1 2 2 v2 H3","M18 14 v8","M14 18 h8"),
+    "house" to listOf("M2 10 l10 -8 l10 8","M4 9 v11 a1 1 0 0 0 1 1 h4 v-5 a3 3 0 0 1 6 0 v5 h4 a1 1 0 0 0 1 -1 V9"),
+    "puzzle" to listOf("M8 8 l3 -3 a2 2 0 0 1 3 0 l5 5 a2 2 0 0 1 0 3 l-5 5 a2 2 0 0 1 -3 0 l-5 -5 a2 2 0 0 1 0 -3 Z","M7 7 l3 3","M5 18 a9 9 0 1 1 15 -1"),
     "ellipsis" to emptyList(),
+    "ellipsis-vertical" to emptyList(),
     "message-square" to listOf("M22 17 a2 2 0 0 1 -2 2 H6.828 a2 2 0 0 0 -1.414 .586 l-2.202 2.202 A.71 .71 0 0 1 2 21.286 V5 a2 2 0 0 1 2 -2 h16 a2 2 0 0 1 2 2 z"),
     "copy" to listOf("M4 16 c-1.1 0 -2 -.9 -2 -2 V4 c0 -1.1 .9 -2 2 -2 h10 c1.1 0 2 .9 2 2")
 )
@@ -78,6 +102,13 @@ private val iconCircles=mapOf(
     "info" to listOf(IconCircle(12f,12f,10f)),
     "globe" to listOf(IconCircle(12f,12f,10f)),
     "ellipsis" to listOf(IconCircle(12f,12f,1f),IconCircle(19f,12f,1f),IconCircle(5f,12f,1f)),
+    "ellipsis-vertical" to listOf(IconCircle(12f,5f,1.1f,fill=true),IconCircle(12f,12f,1.1f,fill=true),IconCircle(12f,19f,1.1f,fill=true)),
+    "sliders" to listOf(IconCircle(13f,7f,3f),IconCircle(9f,17f,3f)),
+    "monitor" to listOf(IconCircle(12f,20f,.6f,fill=true),IconCircle(4f,23f,.6f,fill=true),IconCircle(8f,23f,.6f,fill=true),IconCircle(12f,23f,.6f,fill=true),IconCircle(16f,23f,.6f,fill=true),IconCircle(20f,23f,.6f,fill=true)),
+    "images" to listOf(IconCircle(11f,11f,.8f,fill=true)),
+    "share-2" to listOf(IconCircle(5f,12f,3f),IconCircle(19f,4f,3f),IconCircle(19f,20f,3f)),
+    "camera" to listOf(IconCircle(12f,12f,4f)),
+    "lock" to listOf(IconCircle(12f,14f,.8f,fill=true)),
     "key-round" to listOf(IconCircle(16.5f,7.5f,.5f,fill=true,afterPaths=true))
 )
 private data class IconShape(val path:Path,val fill:Boolean=false)
@@ -90,7 +121,21 @@ private fun IconRoundRect.toShape():IconShape {
 private fun IconCircle.toShape():IconShape = IconShape(Path().apply {
     addOval(Rect(cx-r,cy-r,cx+r,cy+r),Path.Direction.Clockwise)
 },fill)
-private fun iconShapes(name:String):List<IconShape> = buildList {
+private fun iconShapes(requestedName:String):List<IconShape> = buildList {
+    val name=when(requestedName){
+        "audio", "audio-lines", "waveform" -> "audio-wave"
+        "microphone" -> "mic"
+        "sliders-horizontal" -> "sliders"
+        "remote" -> "monitor"
+        "more-vertical" -> "ellipsis-vertical"
+        "image" -> "images"
+        "home" -> "house"
+        "trash" -> "trash-2"
+        "attachment" -> "paperclip"
+        "plugin" -> "puzzle"
+        "grid", "layout-grid" -> "grid-2x2"
+        else -> requestedName
+    }
     val rect=iconRoundRects[name]
     val circles=iconCircles[name].orEmpty()
     if(rect!=null&&!rect.afterPaths)add(rect.toShape())

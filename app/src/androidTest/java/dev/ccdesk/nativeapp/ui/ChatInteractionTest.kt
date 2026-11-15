@@ -147,21 +147,20 @@ class ChatInteractionTest {
         val sent=CopyOnWriteArrayList<JSONObject>();var events=JSONArray();private val main=Handler(Looper.getMainLooper());private var observer:SocketObserver?=null
         fun session()=json("id" to "session-1","title" to "UI fixture","projectPath" to "/test","permissionMode" to "default","device" to json("id" to "server","name" to "Fixture"),"activeRun" to JSONObject.NULL)
         fun frame(value:JSONObject){main.post{observer?.message(value.toString())}}
-        override suspend fun getEndpoint()="https://fixture.test/"
+        override suspend fun getEndpoint()="wss://fixture.test/ws"
         override suspend fun setEndpoint(endpoint:String){}
         override suspend fun readPreferences(endpoint:String)=Preferences()
         override suspend fun writePreferences(endpoint:String,preferences:Preferences){}
-        override suspend fun credential(endpoint:String)=""
+        override suspend fun credential(endpoint:String)= "fixture-service-token-0123456789"
         override suspend fun saveCredential(endpoint:String,credential:String){}
         override suspend fun deviceId()="fixture-device"
         override suspend fun fingerprint(endpoint:String)=""
         override suspend fun setFingerprint(endpoint:String,fingerprint:String){}
         override suspend fun clearOrigin(endpoint:String){}
-        override suspend fun clearBrowserSession(endpoint:String){}
-        override suspend fun http(endpoint:String,route:String,body:JSONObject?)=json("authenticated" to true,"session" to json("id" to "fixture-browser"))
-        override suspend fun socket(endpoint:String,direct:Boolean,observer:SocketObserver):SocketConnection{
+
+        override suspend fun socket(endpoint:String,observer:SocketObserver):SocketConnection{
             this.observer=observer
-            main.post{observer.opened();frame(json("type" to "ready","protocolVersion" to 25,"sessions" to JSONArray().put(session()),"browser" to json("sessionId" to "fixture-browser","serverDeviceId" to "server")))}
+            main.post{observer.opened();frame(json("type" to "ready","protocolVersion" to 25,"sessions" to JSONArray().put(session())));frame(json("type" to "devices","devices" to JSONArray().put(json("id" to "server","server" to true,"ready" to true))))}
             return object:SocketConnection{
                 override fun send(text:String):Boolean{val request=JSONObject(text);sent+=request;val id=request.optString("requestId");if(id.isNotEmpty()){if(request.optString("type")=="session.subscribe")frame(json("type" to "session.snapshot","requestId" to id,"session" to session(),"mode" to "replace","events" to events,"hasEarlier" to false));frame(json("type" to "response","requestId" to id,"ok" to true))};return true}
                 override fun close(){}

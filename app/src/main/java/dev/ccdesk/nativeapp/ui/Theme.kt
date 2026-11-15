@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.semantics.contentDescription
@@ -43,6 +44,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.unit.dp
@@ -50,30 +52,62 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 
-data class DeskColors(val background:Color,val foreground:Color,val card:Color,val userBubble:Color,val muted:Color,val mutedForeground:Color,val border:Color,val secondary:Color,val accent:Color,val sidebar:Color,val dark:Boolean)
-private val light=DeskColors(Color(0xfffaf9f5),Color(0xff262620),Color.White,Color(0xffeeede8),Color(0xfff0efe9),Color(0xff68665e),Color(0xffd9d7ce),Color(0xfff3f2ec),Color(0xffe9e7df),Color(0xfff3f2ec),false)
-private val dark=DeskColors(Color(0xff191919),Color(0xffeeeae3),Color(0xff303030),Color(0xff2a2a28),Color(0xff282827),Color(0xffaaa8a2),Color(0xff424240),Color(0xff262625),Color(0xff383836),Color(0xff202020),true)
+data class DeskColors(val background:Color,val foreground:Color,val card:Color,val userBubble:Color,val muted:Color,val mutedForeground:Color,val border:Color,val secondary:Color,val accent:Color,val sidebar:Color,val dark:Boolean,val primary:Color=Color(0xff3566f0),val onPrimary:Color=Color.White)
+// Sampled from the reference device at 3 px/dp. Keep the paper, floating controls and
+// sidebar separate: their nearly-white surfaces are visibly different in the app.
+private val light=DeskColors(Color(0xfffcfcfc),Color(0xff0d0d0d),Color.White,Color(0xffedf3fe),Color(0xfff3f3f3),Color(0xff8f8f8f),Color(0xffdddddd),Color(0xfff4f4f4),Color(0xffe8e8e8),Color.White,false)
+private val dark=DeskColors(Color(0xff171717),Color(0xfff3f3f3),Color(0xff303030),Color(0xff27364d),Color(0xff292929),Color(0xffa3a3a3),Color(0xff424242),Color(0xff292929),Color(0xff393939),Color(0xff202020),true,Color(0xff6f96ff))
 val LocalDeskColors=staticCompositionLocalOf { light }
-@Composable fun DeskTheme(content:@Composable ()->Unit) { CompositionLocalProvider(LocalDeskColors provides if(isSystemInDarkTheme()) dark else light,LocalTextSelectionColors provides TextSelectionColors(Color(0xff008577),Color(0xff008577).copy(alpha=.4f)),LocalReducedMotion provides rememberReducedMotion(), content=content) }
+@Composable fun DeskTheme(content:@Composable ()->Unit) {
+    val colors=if(isSystemInDarkTheme()) dark else light
+    CompositionLocalProvider(LocalDeskColors provides colors,LocalTextSelectionColors provides TextSelectionColors(colors.primary,colors.primary.copy(alpha=.24f)),LocalReducedMotion provides rememberReducedMotion(),content=content)
+}
 
 @Composable fun DeskText(text:String,modifier:Modifier=Modifier,size:Int=16,color:Color=LocalDeskColors.current.foreground,weight:FontWeight=FontWeight.Normal,lineHeight:Int=(size*1.4).toInt(),maxLines:Int=Int.MAX_VALUE) {
-    // RN CustomLineHeightSpan applies half-leading to the paragraph's first and last line, too.
-    // Compose's default paragraph-edge trimming otherwise shortens multi-line blocks.
-    Text(text,modifier,color=color,fontSize=size.sp,fontWeight=weight,lineHeight=lineHeight.sp,maxLines=maxLines,overflow=TextOverflow.Ellipsis,style=TextStyle(platformStyle=PlatformTextStyle(includeFontPadding=false),lineHeightStyle=LineHeightStyle(LineHeightStyle.Alignment.Center,LineHeightStyle.Trim.None)))
+    Text(text,modifier,color=color,fontSize=size.sp,fontWeight=weight,fontFamily=FontFamily.SansSerif,lineHeight=lineHeight.sp,maxLines=maxLines,overflow=TextOverflow.Ellipsis,style=TextStyle(platformStyle=PlatformTextStyle(includeFontPadding=false),lineHeightStyle=LineHeightStyle(LineHeightStyle.Alignment.Center,LineHeightStyle.Trim.None)))
 }
 /** Text button: spring press scale, quick highlight, smooth enabled/selected transitions and an optional loading spinner. */
 @Composable fun DeskAction(label:String,enabled:Boolean=true,primary:Boolean=false,selected:Boolean=false,modifier:Modifier=Modifier,loading:Boolean=false,onClick:()->Unit) {
     val c=LocalDeskColors.current
     val interaction=remember{MutableInteractionSource()};val pressed by interaction.pressedState()
     val filled=primary||selected
-    val background by animateColorAsState(if(filled)(if(pressed)c.foreground.copy(alpha=.86f)else c.foreground)else if(pressed)c.accent else c.secondary,DeskMotion.highlight(pressed),label="action background")
-    val textColor by animateColorAsState(if(filled)c.background else c.foreground,DeskMotion.state(),label="action text")
+    val background by animateColorAsState(if(filled)(if(pressed)c.primary.copy(alpha=.86f)else c.primary)else if(pressed)c.accent else c.secondary,DeskMotion.highlight(pressed),label="action background")
+    val textColor by animateColorAsState(if(filled)c.onPrimary else c.foreground,DeskMotion.state(),label="action text")
     val alpha=animatedEnabledAlpha(enabled||loading)
-    Box(modifier.pressScale(pressed,enabled&&!loading,if(selected)DeskMotion.ChipPressScale else DeskMotion.ButtonPressScale).graphicsLayer{this.alpha=alpha;compositingStrategy=CompositingStrategy.ModulateAlpha}.background(background,RoundedCornerShape(12.dp)).clickable(enabled=enabled&&!loading,interactionSource=interaction,indication=null,onClick=onClick).semantics{text=AnnotatedString(label);role=Role.Button;if(selected)this.selected=true}.padding(horizontal=16.dp,vertical=12.dp),contentAlignment=Alignment.Center) {
+    Box(modifier.pressScale(pressed,enabled&&!loading,if(selected)DeskMotion.ChipPressScale else DeskMotion.ButtonPressScale).graphicsLayer{this.alpha=alpha;compositingStrategy=CompositingStrategy.ModulateAlpha}.background(background,CircleShape).clickable(enabled=enabled&&!loading,interactionSource=interaction,indication=null,onClick=onClick).semantics{text=AnnotatedString(label);role=Role.Button;if(selected)this.selected=true}.padding(horizontal=18.dp,vertical=12.dp),contentAlignment=Alignment.Center) {
         Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.Center){
             AnimatedVisibility(loading,enter=fadeIn(DeskMotion.fadeIn())+expandHorizontally(DeskMotion.layoutSize),exit=fadeOut(DeskMotion.fadeOut())+shrinkHorizontally(DeskMotion.layoutSize)){Box(Modifier.padding(end=8.dp)){DeskSpinner("正在处理",16.dp)}}
             NativeSpanText(label,size=14,lineHeight=20,color=textColor,weight=if(filled)600 else 500,selectable=false,exposeText=false)
         }
+    }
+}
+/** White floating controls share a soft shadow while retaining a crisp circular edge. */
+internal fun Modifier.deskFloatingSurface(shape:Shape=CircleShape,elevation:Dp=18.dp)=composed {
+    val colors=LocalDeskColors.current
+    graphicsLayer {
+        this.shape=shape
+        shadowElevation=elevation.toPx()
+        // Android applies its light-source opacity to these colors again. A very
+        // faint color here loses the broad gray halo around the reference controls.
+        ambientShadowColor=Color.Black.copy(alpha=if(colors.dark).8f else .7f)
+        spotShadowColor=Color.Black.copy(alpha=if(colors.dark).5f else .35f)
+    }.background(colors.card,shape)
+}
+
+@Composable internal fun DeskSurfaceIconButton(
+    name:String,label:String,modifier:Modifier=Modifier,enabled:Boolean=true,
+    size:Dp=44.dp,iconSize:Dp=24.dp,tint:Color=LocalDeskColors.current.foreground,
+    strokeWidth:Float=2f,onClick:()->Unit,
+) {
+    val c=LocalDeskColors.current
+    val interaction=remember{MutableInteractionSource()};val pressed by interaction.pressedState()
+    val alpha=animatedEnabledAlpha(enabled,.4f)
+    val highlight=animatedHighlight(pressed&&enabled,false,c.accent)
+    Box(modifier.size(size).pressScale(pressed,enabled,DeskMotion.IconPressScale)
+        .floatingAlpha{alpha}.deskFloatingSurface().background(highlight,CircleShape)
+        .clickable(enabled=enabled,interactionSource=interaction,indication=null,onClick=onClick)
+        .semantics{contentDescription=label;role=Role.Button},contentAlignment=Alignment.Center) {
+        DeskIcon(name,size=iconSize,tint=tint,strokeWidth=strokeWidth)
     }
 }
 /** Icon button: spring press scale, animated highlight/selection and a cross-scaled icon when [name] changes. */

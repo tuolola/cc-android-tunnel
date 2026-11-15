@@ -22,9 +22,9 @@ class SessionNavigationTest {
         private val held = CopyOnWriteArrayList<String>()
         private lateinit var downstream: SocketObserver
         private var holding = true
-        override suspend fun socket(endpoint: String, direct: Boolean, observer: SocketObserver): SocketConnection {
+        override suspend fun socket(endpoint: String, observer: SocketObserver): SocketConnection {
             downstream = observer
-            return fixture.socket(endpoint, direct, object : SocketObserver by observer {
+            return fixture.socket(endpoint,object : SocketObserver by observer {
                 override fun message(text: String) {
                     val frame = JSONObject(text)
                     val historyReply = fixture.sentOf("session.subscribe").any { it.optString("requestId") == frame.optString("requestId") }
@@ -49,18 +49,18 @@ class SessionNavigationTest {
         val repository = WorkbenchRepository(transport)
         runBlocking { repository.start() }
         compose.waitUntil(5_000) { repository.state.value.status == "online" }
-        compose.setContent { WorkbenchApp(repository, requestedRoute = "chats") }
+        compose.setContent { WorkbenchApp(repository, requestedRoute = "remote") }
         compose.waitForIdle()
         return repository
     }
 
-    @Test fun openingAnOfflineDeviceSessionNavigatesBeforeHistoryAndSurvivesListDisposal() {
+    @Test fun openingAnOfflineDeviceSessionNavigatesBeforeHistoryAndSurvivesRemoteDisposal() {
         val transport = DelayedHistory(); val repository = start(transport)
         try {
             compose.onNodeWithContentDescription("打开会话：UI fixture").performClick()
             compose.waitUntil(5_000) { transport.pendingCount > 0 }
             compose.waitForIdle()
-            compose.onAllNodesWithContentDescription("查找会话").assertCountEquals(0)
+            compose.onAllNodesWithContentDescription("查找电脑或会话").assertCountEquals(0)
             compose.onNodeWithText("正在读取会话…").assertIsDisplayed()
             compose.onNodeWithText("设备离线 · 只读").assertIsDisplayed()
             assertEquals("session-1", repository.state.value.selectedId)
@@ -81,7 +81,7 @@ class SessionNavigationTest {
             compose.waitForIdle()
             compose.runOnIdle { transport.release(error = true) }
             compose.waitUntil(5_000) { repository.state.value.histories["session-1"]?.loadError != null }
-            compose.onAllNodesWithContentDescription("查找会话").assertCountEquals(0)
+            compose.onAllNodesWithContentDescription("查找电脑或会话").assertCountEquals(0)
             compose.onAllNodesWithText("正在读取会话…").assertCountEquals(0)
             compose.onNodeWithText("History temporarily unavailable").assertIsDisplayed()
             compose.onNodeWithText("重新读取会话").performClick()

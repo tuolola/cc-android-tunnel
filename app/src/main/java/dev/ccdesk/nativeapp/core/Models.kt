@@ -43,11 +43,13 @@ data class Notice(val id: String, val sessionId: String, val title: String, val 
     companion object { fun from(o: JSONObject) = Notice(o.getString("id"),o.getString("sessionId"),o.getString("title"),o.getString("body"),o.getString("at"),o.optBoolean("read")) }
 }
 data class WorkbenchState(val status: String = "loading", val endpoint: String = "", val authenticated: Boolean = false,
-    val error: String? = null, val version: String? = null, val webSessionId: String? = null, val serverDeviceId: String? = null,
-    val defaultModel: String? = null, val totpEnabled: Boolean = false, val sessions: List<Session> = emptyList(),
+    val error: String? = null, val version: String? = null, val serverDeviceId: String? = null,
+    val defaultModel: String? = null, val sessions: List<Session> = emptyList(),
     val devices: List<Device> = emptyList(), val selectedId: String? = null, val histories: Map<String, History> = emptyMap(),
     val modelCatalogs: Map<String,Catalog> = emptyMap(), val pins: List<String> = emptyList(), val notices: List<Notice> = emptyList(),
-    val account: JSONObject? = null, val webSettings: JSONObject? = null, val usageSummary: JSONObject? = null, val usagePage: JSONObject? = null)
+    val account: JSONObject? = null, val webSettings: JSONObject? = null, val usageSummary: JSONObject? = null, val usagePage: JSONObject? = null,
+    val localDeviceId: String? = null,
+    val modelCatalogLoading: Set<String> = emptySet(), val modelCatalogErrors: Map<String,String> = emptyMap())
 data class Preferences(val pins: List<String> = emptyList(), val notices: List<Notice> = emptyList())
 
 private fun fragmentKey(p: JSONObject) = listOf(p.optString("type"), p.stringOrNull("messageId") ?: p.stringOrNull("toolId") ?: p.stringOrNull("taskId") ?: "", p.optString("stream")).joinToString("/")

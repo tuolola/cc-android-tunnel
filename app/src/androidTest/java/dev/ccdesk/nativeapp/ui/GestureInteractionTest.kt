@@ -88,12 +88,15 @@ class GestureInteractionTest {
                 }
             }
         }
-        fun fraction():Float {
+        fun screenCoverage():Float {
             val pixels=compose.onNodeWithTag("motion-surface").captureToImage().toPixelMap()
             val y=pixels.height/2
             val edge=(0 until pixels.width).firstOrNull{pixels[it,y].green>.1f}?:pixels.width
             return edge.toFloat()/pixels.width
         }
+        // The phone drawer occupies 80% of the screen; animation progress is relative
+        // to that width, while coverage below independently checks its resting size.
+        fun fraction():Float = screenCoverage()/.8f
         compose.mainClock.advanceTimeByFrame();compose.mainClock.advanceTimeByFrame()
         assertEquals(0f,fraction(),.001f)
         for((target,label) in listOf(true to "opening",false to "closing")){
@@ -104,6 +107,7 @@ class GestureInteractionTest {
             assertTrue("$label must be clearly under way after five frames",if(target)samples[4]>.3f else samples[4]<.7f)
             assertTrue("$label must show intermediate positions",samples.count{it in .05f..<.95f}>=3)
             assertEquals("$label must settle",if(target)1f else 0f,samples.last(),.001f)
+            assertEquals("$label must retain the 80% phone drawer width",if(target).8f else 0f,screenCoverage(),.001f)
         }
     }
 }

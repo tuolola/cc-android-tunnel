@@ -17,7 +17,7 @@
 </p>
 
 <p>
-  <a href="https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.3-native/CCtunnel.apk"><img src="https://img.shields.io/badge/APK-1.0.3--native-16a34a?style=for-the-badge" alt="下载 CCtunnel 1.0.3-native 公开测试版 APK" /></a>
+  <a href="https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.4-native/CCtunnel.apk"><img src="https://img.shields.io/badge/APK-1.0.4--native-16a34a?style=for-the-badge" alt="下载 CCtunnel 1.0.4-native 公开测试版 APK" /></a>
   <a href="#快速开始"><img src="https://img.shields.io/badge/使用教程-从服务器到手机-2563eb?style=for-the-badge" alt="从零开始使用" /></a>
   <a href="#验证与验收"><img src="https://img.shields.io/badge/验证-测试与审计-0f766e?style=for-the-badge" alt="测试与审计" /></a>
   <a href="https://github.com/sun168567/cc-desk-tunnel"><img src="https://img.shields.io/badge/项目来源-cc--desk--tunnel-475569?style=for-the-badge" alt="上游项目" /></a>
@@ -25,7 +25,7 @@
 </p>
 
 <p>
-  <img src="https://img.shields.io/badge/版本-1.0.3--native-2563eb?style=flat-square" alt="版本 1.0.3-native" />
+  <img src="https://img.shields.io/badge/版本-1.0.4--native-2563eb?style=flat-square" alt="版本 1.0.4-native" />
   <img src="https://img.shields.io/badge/Kotlin-2.2.10-7f52ff?style=flat-square" alt="Kotlin 2.2.10" />
   <img src="https://img.shields.io/badge/UI-Jetpack%20Compose-4285f4?style=flat-square" alt="Jetpack Compose" />
   <img src="https://img.shields.io/badge/Android-7.0%2B-3ddc84?style=flat-square" alt="Android 7.0 及以上" />
@@ -36,6 +36,8 @@
 > 使用 Kotlin 与 Jetpack Compose，在 Android 上连接和操作你的工作台。
 
 </div>
+
+**1.0.4-native 兼容提示（versionCode 10）：** 本版只提供 WSS 服务直连，已移除 HTTPS 工作台登录及模式切换。旧 HTTPS 地址不会自动转换，请重新填写管理员提供的完整 WSS 服务地址和服务凭据；原有 WSS 连接继续使用对应地址已保存的凭据与证书指纹。
 
 先感谢一下原作者 [sun168567](https://github.com/sun168567) 和 [cc-desk-tunnel](https://github.com/sun168567/cc-desk-tunnel) 的贡献者们，把这么实用的项目做出来，还愿意开源分享。有了上游的基础，才有了这个安卓版；这里做的事情，就是让大家离开电脑后，也能拿起手机接着用。原项目的功劳不能少，觉得好用的话，也欢迎去上游点个 Star，支持一下原作者！
 
@@ -57,7 +59,7 @@
 
 ```mermaid
 flowchart LR
-    Phone[Android 手机：CCtunnel] <-->|WSS 或 HTTPS 工作台接口| Server[你的 VPS：cc-desk-tunnel + Claude Code]
+    Phone[Android 手机：CCtunnel] <-->|WSS 服务直连| Server[你的 VPS：cc-desk-tunnel + Claude Code]
     Desktop[Windows：上游桌面客户端] <-->|主动建立加密执行通道| Server
     Desktop --> Project[电脑上的项目文件与开发工具]
     Server --> Model[模型服务：使用你自己的账号或 API 凭据]
@@ -65,7 +67,7 @@ flowchart LR
 
 **会话在哪里运行，取决于会话归属：**
 
-- **操作电脑项目**：先在桌面客户端添加项目并建立会话，再在手机会话列表打开它。电脑必须开机、联网，桌面客户端保持连接，执行通道就绪；手机和电脑不必在同一 Wi-Fi。
+- **操作电脑项目**：先在桌面客户端添加项目并建立会话，再从手机侧栏的“远程控制”按电脑打开它。电脑必须开机、联网，桌面客户端保持连接，执行通道就绪；手机和电脑不必在同一 Wi-Fi。
 - **操作服务器环境**：在手机直接新建的普通会话运行于服务端容器，不会自动使用电脑项目，也不会把手机文件上传进去。需要电脑项目时，应打开已有的电脑会话。
 
 上游提供服务端和电脑执行能力，本仓库提供原生手机操作界面。你仍需准备自己的服务器和可用模型账号/API 凭据；VPS 费用与模型费用分别计算。更多原理见[上游架构说明](https://github.com/sun168567/cc-desk-tunnel/blob/v0.3.14/docs/architecture.md)。
@@ -76,9 +78,9 @@ flowchart LR
 
 使用前需要可访问的**协议 25 工作台服务**及认证信息。本仓库提供 Android 客户端，不包含工作台服务端或模型服务。当前 App 使用中文界面。
 
-## 应用实拍
+## 历史界面实拍
 
-以下为当前原生 App 在 Android 模拟器上的实拍，展示浅色与深色首页、权限选择和会话设置，不含会话消息或连接凭据。静态截图用于说明界面布局；动画、真实服务流程和不同设备的验证范围见下方[验证与验收](#验证与验收)。
+以下保留的是 **1.0.4 界面改版之前的历史布局**，展示旧版浅色与深色首页、权限选择和会话设置，不含会话消息或连接凭据。本版已调整顶部栏、侧栏、输入框与菜单；当前布局与动效说明见 [UI 参考与验证记录](./docs/ui-reference.md)，验证范围见下方[验证与验收](#验证与验收)。
 
 <table>
   <tr>
@@ -105,18 +107,19 @@ flowchart LR
 
 | 范围 | 原生实现 |
 | --- | --- |
-| 连接与认证 | HTTPS 工作台登录、直接 WSS 服务令牌连接、连接状态、退出与重新连接 |
-| 会话与项目 | 会话列表、新建、切换、重命名、删除、置顶；列表中显示项目，支持内容查找及更早历史加载 |
-| 对话 | 发送消息、接收流式回复、停止生成、继续执行及请求上下文压缩 |
-| 内容展示 | 原生 Markdown、代码语法高亮、表格、链接、图片、文字选择与复制 |
-| 工具与交互 | 思考内容、工具调用与结果、权限回复、问题回答、后台任务控制 |
-| 模型设置 | 服务端模型列表、自定义模型标识、思考强度及会话配置 |
-| 输入区与会话设置 | 输入框左侧选择权限模式，右侧选择模型并发送；右上角齿轮提供内容查找、状态刷新、上下文与后台任务操作 |
-| 设置页面 | 连接与访问管理、TOTP 控制、账号与用量、应用内通知和帮助 |
+| 连接与认证 | WSS 服务凭据认证、证书指纹、连接状态、退出与重新连接 |
+| 侧栏与会话 | “远程控制”“通知”和普通会话记录；本地搜索会话标题，每次追加显示 30 条已缓存记录，新建与切换会话、查找消息及加载更早历史 |
+| 远程控制 | 按电脑展示项目会话，搜索电脑或会话；保留离线电脑历史，按设备标识排除服务端与手机本机 |
+| 对话 | 发送消息、接收流式回复、停止生成，以及符合状态条件时继续执行 |
+| 内容展示 | 原生 Markdown、代码语法高亮、表格、链接、图片；回复复制、选择文本和系统分享，代码块单独复制 |
+| 工具与交互 | 思考内容、工具调用与结果、权限回复、问题回答；支持的活动工具可转入后台或停止 |
+| 模型设置 | 顶部选择模型；连接后按设备预读服务端模型列表，支持自定义模型标识及服务端支持的思考强度 |
+| 输入区与会话菜单 | 仅电脑会话在输入框左侧提供权限模式入口；顶部新建会话，右上会话菜单仅含“在聊天中查找”和“刷新会话” |
+| 设置页面 | 侧栏底部头像进入设置，支持设置搜索；包含直连设置、服务端 Web 访问管理与 TOTP 控制、账号与用量、应用内通知和帮助 |
 | Android 体验 | 浅色与深色主题、原生多行输入框、键盘避让、滚动、手势、禁用与只读状态 |
 | 恢复与本地状态 | 临时断线时保留已加载历史，按持久事件游标恢复；保存服务范围内的偏好，通过 Android Keystore 保护凭据 |
 
-**App 更新（`1.0.2-native` 起）**：设置概览支持手动检查、前台自动检查和测试版渠道选择；自动检查成功后间隔 24 小时，失败后 1 小时再试。下载交给系统浏览器，由用户安装。旧版 `v1.0.1-native` 不含此功能，需要先手动下载安装当前版本 `v1.0.3-native`。详见 [App 更新与版本发布](./docs/app-updates.md)。
+**App 更新（`1.0.2-native` 起）**：从侧栏底部头像进入设置，可手动检查、开启前台自动检查和选择测试版渠道；自动检查成功后间隔 24 小时，失败后 1 小时再试。下载交给系统浏览器，由用户安装。旧版 `v1.0.1-native` 不含此功能，需要先手动下载安装当前版本 `v1.0.4-native`。详见 [App 更新与版本发布](./docs/app-updates.md)。
 
 ## 快速开始
 
@@ -250,14 +253,14 @@ sudo cc-desk-tunnel summary
 
 **操作位置：Android 手机；需要自行构建时在开发电脑操作。**
 
-1. [直接下载 CCtunnel.apk（v1.0.3-native）](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.3-native/CCtunnel.apk)。适用于 **Android 7.0 及以上**，当前为 **Debug 签名的公开测试版**（versionCode 9）。查看[版本发布说明](https://github.com/tuolola/cc-android-tunnel/releases/tag/v1.0.3-native)和 [SHA256SUMS.txt 校验清单](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.3-native/SHA256SUMS.txt)。
+1. [直接下载 CCtunnel.apk（v1.0.4-native）](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.4-native/CCtunnel.apk)。适用于 **Android 7.0 及以上**，当前为 **Debug 签名的公开测试版**（versionCode 10）。查看[版本发布说明](https://github.com/tuolola/cc-android-tunnel/releases/tag/v1.0.4-native)和 [SHA256SUMS.txt 校验清单](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.4-native/SHA256SUMS.txt)。
 2. 核对 SHA-256 后将 APK 传到手机安装。也可以连接 USB 调试，在 APK 所在目录执行 `adb install -r .\CCtunnel.apk`。已有应用须同包名、同签名且版本允许更新，才能覆盖安装。
 3. 打开手机上的 **CCtunnel**。手机只需安装 APK；Node、Docker、Android Studio 均不需要安装到手机。
 
-本版 APK 大小为 **13,563,377 字节**，SHA-256 为：
+`1.0.4-native` APK 大小为 **13,612,525 字节**，请与本版发布附件中的 `SHA256SUMS.txt` 核对 SHA-256：
 
 ```text
-dac00cd7cdb07a969cbb46f5b54aa2c92da1f56a090708778d590268e7f06cef
+88a7da5ecb501859c90d8c060e4209866348a1b3742c88191a1232fb17481051
 ```
 
 从 `v1.0.1-native` 升级需手动下载本版；旧版没有 App 更新入口。本版沿用相同签名，不需要先卸载旧版。
@@ -268,9 +271,9 @@ dac00cd7cdb07a969cbb46f5b54aa2c92da1f56a090708778d590268e7f06cef
 
 ### 第 7 步：手机连接同一个服务端
 
-**操作位置：手机 CCtunnel。主流程使用 WSS 直连，不要求开启上游 Web 访问。**
+**操作位置：手机 CCtunnel。使用 WSS 直连，不要求开启上游 Web 访问。**
 
-1. 打开“连接工作台”。如当前显示 HTTPS 登录方式，切换到“使用服务地址直连”。
+1. 打开“连接工作台”。
 2. 按下表填入第 3 步保存的三项信息，然后点“连接”。
 
 | 手机字段 | 应填内容 | 不要填写 |
@@ -279,10 +282,10 @@ dac00cd7cdb07a969cbb46f5b54aa2c92da1f56a090708778d590268e7f06cef
 | 服务证书指纹（可选） | 自签证书填写经 SSH 核对的 SHA-256 指纹；系统信任的 CA 证书留空 | SSH 主机指纹、随意猜测的指纹；不要通过关闭校验来连接 |
 | 服务凭据 | 安装器生成的完整工作台凭据 | VPS 密码、Claude 登录密码或模型 API Key |
 
-3. 连接成功后打开会话列表，选择刚才的“手机联调”会话，确认能看到电脑上的历史。
+3. 连接成功后打开侧栏，进入“远程控制”，在对应电脑下选择刚才的“手机联调”会话，确认能看到电脑上的历史。
 4. 如果只想继续操作电脑项目，直接进入这个已有会话。**不要为了找电脑项目而点新建：手机直接新建的是服务端会话。**
 
-WSS 直连使用服务凭据认证；HTTPS 模式才使用 Web 登录、Cookie 与可选 TOTP。开启 Web TOTP 不会让 WSS 直连自动要求动态码，两种入口的凭据管理要分别理解。
+手机通过 WSS 服务凭据认证，不使用工作台密码登录或身份验证器动态码。服务地址必须包含 `/ws`，不能填写 HTTPS 网页入口。
 
 **完成标志：** 手机显示已连接，能打开同一条电脑会话及其历史。
 
@@ -296,16 +299,9 @@ WSS 直连使用服务凭据认证；HTTPS 模式才使用 Web 登录、Cookie �
 
 日常使用只需保持 **VPS 运行 + 项目电脑在线且桌面端连接 + 手机可访问 VPS**。如果工作仅在手机新建的服务端会话中进行，执行环境是服务器容器，不要求该 Windows 电脑在线，但服务器需要具备那个任务的文件和工具。
 
-### 可选：改用 HTTPS 工作台入口登录手机
+### 服务端访问管理
 
-WSS 已能满足上述流程。需要 Web 登录/TOTP 时，按[上游浏览器访问说明](https://github.com/sun168567/cc-desk-tunnel/blob/v0.3.14/docs/server-web.md)另行启用：
-
-1. **电脑桌面客户端**打开“设置 → 浏览器访问”，启用 Web 访问，复制它显示的完整 HTTPS 地址。自定义域名和路径也必须保留。
-2. **手机 App**在“连接工作台”切换到“浏览器访问”，将该地址填入“HTTPS 入口地址”；不要填 `/ws`，也不要手工拼接 `/api/ws`。
-3. 可信 CA 证书将指纹留空；自签入口填写该入口的可信 SHA-256 证书指纹。然后连接，在“工作台密码”填工作台服务凭据；启用了验证器时，再输入当前六位动态码登录。
-4. 域名/路径变更或登录过期后，使用新入口重新登录。需要域名与反向代理时，继续参考[上游 nginx 配置](https://github.com/sun168567/cc-desk-tunnel/blob/v0.3.14/deploy/nginx.md)。
-
-这里“浏览器访问”是上游认证接口的名称；App 仍使用 Kotlin/Compose 原生界面，不会打开 WebView 来承载聊天。
+“设置 → 访问管理”通过当前 WSS 连接管理上游服务端的 Web 访问配置、身份验证器和浏览器登录设备。这些设置供上游浏览器入口使用，不是手机的另一种登录方式；开启 Web TOTP 不会给 WSS 直连增加动态码认证。手机连接仍使用服务地址和服务凭据。
 
 ### 常见问题与日常维护
 
@@ -314,7 +310,7 @@ WSS 已能满足上述流程。需要 Web 登录/TOTP 时，按[上游浏览器�
 | 手机连接超时 | VPS 是否运行 → 公网 IP/端口是否正确 → 云安全组和主机防火墙 → 手机网络是否能到达 VPS；不要用 Windows 内网地址代替 VPS |
 | 证书错误 | 指纹是否完整且对应实际入口、证书是否续期/替换、手机时间和证书有效期；从自己的 SSH 终端重新核对，不关闭 TLS 校验 |
 | 服务凭据错误 | 是否误填 SSH 密码或模型 Key；复制完整随机凭据。凭据轮换后桌面和手机都要更新 |
-| HTTPS 入口返回 404/没有登录信息 | 桌面端 Web 访问是否开启，域名和自定义路径是否一致；WSS 方式则应使用根路径 `/ws` |
+| 提示服务地址无效 | 使用管理员提供的完整 `wss://主机:端口/ws` 地址，不能填写 HTTPS 网页入口或省略 `/ws` |
 | 手机能看历史，但电脑项目不能执行 | 电脑是否在线、未睡眠，上游桌面端和执行通道是否保持连接，会话是否属于那台电脑 |
 | 手机新会话里找不到 `D:\Projects` | 新建的是 Linux 服务端会话；回到电脑先建立项目会话，再从手机打开 |
 | 已连接但模型不回复 | 在桌面账号页检查授权、额度及模型配置，并检查服务器到模型服务的网络；工作台连接成功不代表模型账号可用 |
@@ -386,7 +382,13 @@ python -B scripts/audit-native-apk.py app/build/outputs/apk/debug/app-debug.apk 
 
 [原生构建检查](./gradle/native-boundary.gradle.kts) 会检查生产源码及已解析的运行时依赖；APK 构建还会检查 DEX 引用、打包资源和原生库，拒绝受限的 JavaScript 引擎及 WebView 渲染。[Python 审计](./scripts/audit-native-apk.py) 提供独立复核。检查允许 AndroidX 的静态 `WebView.findAddress` 兼容引用，仍会拒绝创建或渲染 WebView。
 
-### 滚动修复验证 — 2026-11-15
+### 1.0.4-native 本轮验证 — 2026-11-15
+
+最终 `1.0.4-native` / versionCode 10 Debug APK 与设备测试 APK 已构建成功，沿用原有 Debug 签名。本版通过 **79 项 JVM 测试**、Android Lint、源码与 APK 原生边界审计，以及 **8 项审计回归**。
+
+版本号递增前，实体 Android 手机上已通过 **9 项针对性用例与动画帧检查**，覆盖浮层阴影、回复操作及相关交互。动画帧检查确认半透明浮层内部填色均匀，并检查阴影外延；详细范围见 [UI 参考与验证记录](./docs/ui-reference.md)。这不是完整真机套件，也不代表全部真实服务流程已验收；下列 1.0.3 和 1.0.2 结果保留为历史记录。
+
+### 1.0.3-native 滚动修复历史验证 — 2026-11-15
 
 `1.0.3-native`（versionCode 9）修复首次打开或切换会话后，上滑查看历史消息时闪动并自动回到底部的问题。滚动监听随当前会话重新绑定，阅读历史时保留位置，点击“回到最新消息”后继续跟随回复。
 
@@ -427,16 +429,16 @@ Debug APK 已构建，签名证书与 `1.0.2-native` 相同。本版通过 65 �
 **仍未完成的验收：**
 
 - 真实权限审批和问题回答往返链路；当前审批/问题覆盖来自原生 UI fixture。
-- 真实后台任务、完整 TOTP/访问撤销流程，以及覆盖多个完整窗口的历史分页。
-- 实际设备上的动画流畅度、快速连续操作及中断后的视觉表现；受控时钟下的手势测试不能替代这些检查。
+- 真实后台任务、服务端 Web TOTP/浏览器登录撤销流程，以及覆盖多个完整窗口的历史分页。
+- 更多设备上的动画流畅度、快速连续操作及中断后的视觉表现；本轮单机针对性动画帧检查不能替代广泛设备验收。
 - 实体设备触觉反馈、TalkBack、更多 Android API 级别及大字体缩放。
 - 不同系统字体、文字选择手柄和屏幕尺寸下的完整视觉检查。
 
 ## 安全与本地数据
 
-连接必须使用 HTTPS/WSS。系统 CA 模式保留平台信任链和主机名校验；显式指纹模式检查配置主机、完整叶证书指纹和证书有效期，不存在信任所有证书的降级方式。认证请求禁止重定向。
+工作台连接必须使用 WSS 服务地址。系统 CA 模式保留平台信任链和主机名校验；显式指纹模式检查配置主机、完整叶证书指纹和证书有效期，不存在信任所有证书的降级方式。连接禁止重定向。
 
-保存的令牌和浏览器会话 Cookie 使用 Android Keystore 加密。退出和更改信任配置会清除相应凭据，应用备份已禁用。服务范围内的本地偏好与凭据分开存储；断线时保留的历史不是全部服务端会话的离线存档。
+保存的服务凭据使用 Android Keystore 加密。退出和更改信任配置会清除相应凭据，应用备份已禁用。服务范围内的本地偏好与凭据分开存储；断线时保留的历史不是全部服务端会话的离线存档。
 
 Android 安装标识为 `dev.ccdesk.nativeapp`，连接深链使用 `cc-android-tunnel://`。
 

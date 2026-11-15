@@ -54,7 +54,7 @@ class SilentPeerRecoveryTest {
         val firstFailure = AtomicReference<Throwable?>()
         val firstFailureAt = AtomicLong()
         val observed = object : WorkbenchTransport by transport {
-            override suspend fun socket(endpoint: String, direct: Boolean, observer: SocketObserver): SocketConnection {
+            override suspend fun socket(endpoint: String, observer: SocketObserver): SocketConnection {
                 val listener = object : SocketObserver {
                     override fun opened() = observer.opened()
                     override fun message(text: String) = observer.message(text)
@@ -64,7 +64,7 @@ class SilentPeerRecoveryTest {
                         observer.failed(cause)
                     }
                 }
-                return transport.socket(endpoint,direct,listener)
+                return transport.socket(endpoint,listener)
             }
         }
         val repository = WorkbenchRepository(observed)
@@ -123,7 +123,7 @@ class SilentPeerRecoveryTest {
         val transport = AndroidWorkbenchTransport(context)
         val failure = AtomicReference<Throwable?>()
         val observed = object : WorkbenchTransport by transport {
-            override suspend fun socket(endpoint: String, direct: Boolean, observer: SocketObserver) = transport.socket(endpoint, direct, object : SocketObserver by observer {
+            override suspend fun socket(endpoint: String, observer: SocketObserver) = transport.socket(endpoint,object : SocketObserver by observer {
                 override fun failed(cause: Throwable) { failure.set(cause); observer.failed(cause) }
             })
         }

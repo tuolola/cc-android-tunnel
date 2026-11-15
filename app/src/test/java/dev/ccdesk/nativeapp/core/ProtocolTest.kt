@@ -13,7 +13,8 @@ import org.junit.Test
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class ProtocolTest {
-    private class FakeSocket(val url: String, val direct: Boolean, val observer: SocketObserver) : SocketConnection {
+    private val serviceCredential = "test-service-credential-0123456789"
+    private class FakeSocket(val url: String, val observer: SocketObserver) : SocketConnection {
         val sent = mutableListOf<JSONObject>(); var closed = false
         override fun send(text: String): Boolean { sent += JSONObject(text); return !closed }
         override fun close() { closed = true }
@@ -29,7 +30,11 @@ class ProtocolTest {
     private class FakeTransport : WorkbenchTransport {
         val sockets = mutableListOf<FakeSocket>(); val credentials = mutableMapOf<String,String>(); val preferences = mutableMapOf<String,Preferences>()
         val preferenceWrites = mutableListOf<Preferences>()
-        var endpoint = ""; var pin = ""; var httpHandler: suspend (String,String,JSONObject?) -> JSONObject = { _,_,_ -> json("authenticated" to true,"session" to json("id" to "browser")) }
+        var endpoint = ""; var pin = ""
+        val credentialReads = mutableListOf<String>()
+        var credentialBarrier: (suspend (String) -> Unit)? = null
+        var deviceIdentity = "android-device"
+        var deviceIdBarrier: (suspend (String) -> Unit)? = null
         var endpointBarrier: (suspend (String) -> Unit)? = null
         var preferenceBarrier: (suspend (String,Preferences) -> Unit)? = null
         var clearOriginHandler: (suspend () -> Unit)? = null
@@ -37,28 +42,90 @@ class ProtocolTest {
         override suspend fun setEndpoint(endpoint: String) { endpointBarrier?.invoke(endpoint); this.endpoint = endpoint }
         override suspend fun readPreferences(endpoint: String) = preferences[endpoint] ?: Preferences()
         override suspend fun writePreferences(endpoint: String, preferences: Preferences) { preferenceBarrier?.invoke(endpoint,preferences); this.preferences[endpoint] = preferences; preferenceWrites += preferences }
-        override suspend fun credential(endpoint: String) = credentials[endpoint].orEmpty()
+        override suspend fun credential(endpoint: String): String { credentialReads += endpoint; credentialBarrier?.invoke(endpoint); return credentials[endpoint].orEmpty() }
         override suspend fun saveCredential(endpoint: String, credential: String) { if (credential.isEmpty()) credentials.remove(endpoint) else credentials[endpoint] = credential }
-        override suspend fun deviceId() = "android-device"
+        override suspend fun deviceId(): String { val id = deviceIdentity; deviceIdBarrier?.invoke(id); return id }
         override suspend fun fingerprint(endpoint: String) = pin
         override suspend fun setFingerprint(endpoint: String, fingerprint: String) { pin = fingerprint; clearOrigin(endpoint) }
         override suspend fun clearOrigin(endpoint: String) { clearOriginHandler?.invoke(); credentials.clear() }
-        override suspend fun clearBrowserSession(endpoint: String) {}
-        override suspend fun http(endpoint: String, route: String, body: JSONObject?) = httpHandler(endpoint,route,body)
-        override suspend fun socket(endpoint: String, direct: Boolean, observer: SocketObserver): SocketConnection = FakeSocket(endpoint,direct,observer).also { sockets += it }
+        override suspend fun socket(endpoint: String, observer: SocketObserver): SocketConnection = FakeSocket(endpoint,observer).also { sockets += it }
         override fun close() {}
     }
     private fun session(id: String = "s") = json("id" to id,"title" to "chat","permissionMode" to "plan","device" to json("id" to "server"),"activeRun" to JSONObject.NULL)
     private fun event(sequence: Long, text: String = "part", id: String = "s") = json("sessionId" to id,"runId" to "r","sequence" to sequence,"createdAt" to "2026-01-01T00:00:00Z","payload" to json("type" to "text.delta","messageId" to "m","text" to text))
     private fun ready(socket: FakeSocket) {
         socket.observer.opened()
-        socket.frame(json("type" to "ready","protocolVersion" to 25,"sessions" to JSONArray().put(session()),"version" to "test").apply { if (!socket.direct) put("browser",json("sessionId" to "browser","serverDeviceId" to "server")) })
+        socket.frame(json("type" to "ready","protocolVersion" to 25,"sessions" to JSONArray().put(session()),"version" to "test"))
     }
+
+    @Test fun localDeviceIdentityPrecedesPresenceSurvivesReconnectAndResetsWithTheService() = runTest {
+        val transport = FakeTransport()
+        val repository = WorkbenchRepository(transport, StandardTestDispatcher(testScheduler))
+        try {
+            repository.connectService("wss://example.test/ws", serviceCredential)
+            assertEquals("Identity must be available before the first handshake frame", "android-device", repository.state.value.localDeviceId)
+            val first = transport.sockets.single()
+            ready(first)
+            first.frame(json("type" to "devices", "devices" to JSONArray()
+                .put(json("id" to "server", "server" to true, "ready" to true))
+                .put(json("id" to "android-device", "name" to "CC Android Tunnel", "ready" to false))
+                .put(json("id" to "computer", "name" to "CC Android Tunnel", "ready" to false))))
+            runCurrent()
+            assertEquals("android-device", first.sent.single { it.optString("type") == "device" }.getString("id"))
+            assertEquals(listOf("computer"), remoteComputers(repository.state.value).map { it.device.id })
+
+            repository.foreground(false); runCurrent()
+            first.observer.failed(java.io.IOException("Offline fixture")); runCurrent()
+            assertEquals("offline", repository.state.value.status)
+            assertEquals("android-device", repository.state.value.localDeviceId)
+            assertEquals(listOf("computer"), remoteComputers(repository.state.value).map { it.device.id })
+
+            val gate = CompletableDeferred<Unit>()
+            transport.deviceIdBarrier = { gate.await() }
+            val reconnect = async { repository.reconnect() }; runCurrent()
+            assertEquals("connecting", repository.state.value.status)
+            assertEquals("Reconnect must keep filtering cached phone presence", "android-device", repository.state.value.localDeviceId)
+            gate.complete(Unit); runCurrent(); reconnect.await()
+            ready(transport.sockets.last()); runCurrent()
+            assertEquals("online", repository.state.value.status)
+            assertEquals("android-device", repository.state.value.localDeviceId)
+
+            repository.logout()
+            assertNull(repository.state.value.localDeviceId)
+            assertTrue(repository.state.value.devices.isEmpty())
+            assertTrue(repository.state.value.sessions.isEmpty())
+        } finally { repository.dispose() }
+    }
+
+    @Test fun staleDeviceIdentityReadCannotOverwriteTheNewServiceGeneration() = runTest {
+        val transport = FakeTransport()
+        val gate = CompletableDeferred<Unit>()
+        transport.deviceIdentity = "old-phone"
+        transport.deviceIdBarrier = { id -> if (id == "old-phone") gate.await() }
+        val repository = WorkbenchRepository(transport, StandardTestDispatcher(testScheduler))
+        try {
+            val oldConnection = async { repository.connectService("wss://old.test/ws", serviceCredential) }
+            runCurrent()
+            assertNull(repository.state.value.localDeviceId)
+            assertTrue(transport.sockets.isEmpty())
+            transport.deviceIdentity = "current-phone"
+            repository.connectService("wss://current.test/ws", serviceCredential)
+            assertEquals("current-phone", repository.state.value.localDeviceId)
+            gate.complete(Unit); runCurrent(); oldConnection.await()
+            assertEquals("wss://current.test/ws", repository.state.value.endpoint)
+            assertEquals("current-phone", repository.state.value.localDeviceId)
+            assertEquals(listOf("wss://current.test/ws"), transport.sockets.map { it.url })
+            ready(transport.sockets.single()); runCurrent()
+            assertEquals("current-phone", transport.sockets.single().sent.single { it.optString("type") == "device" }.getString("id"))
+            assertEquals("online", repository.state.value.status)
+        } finally { gate.complete(Unit); repository.dispose() }
+    }
+
     @Test fun foregroundPreservesHealthySocketPendingReadAndLiveFragments() = runTest {
         val transport = FakeTransport()
         val repository = WorkbenchRepository(transport, StandardTestDispatcher(testScheduler))
         try {
-            repository.setEndpoint("https://example.test")
+            repository.connectService("wss://example.test/ws",serviceCredential)
             val socket = transport.sockets.single()
             ready(socket); runCurrent()
             val reading = async { repository.selectSession("s") }; runCurrent()
@@ -85,7 +152,7 @@ class ProtocolTest {
         val transport = FakeTransport()
         val repository = WorkbenchRepository(transport, StandardTestDispatcher(testScheduler))
         try {
-            repository.setEndpoint("https://example.test")
+            repository.connectService("wss://example.test/ws",serviceCredential)
             repository.foreground(false); repository.foreground(true); runCurrent()
             assertEquals(1, transport.sockets.size)
             val socket = transport.sockets.single(); ready(socket); runCurrent()
@@ -105,7 +172,7 @@ class ProtocolTest {
         val transport = FakeTransport()
         val repository = WorkbenchRepository(transport, StandardTestDispatcher(testScheduler))
         try {
-            repository.setEndpoint("https://example.test")
+            repository.connectService("wss://example.test/ws",serviceCredential)
             val socket = transport.sockets.single(); ready(socket); runCurrent()
             repository.openSession("s"); runCurrent()
             repository.openSession("s"); runCurrent()
@@ -130,7 +197,7 @@ class ProtocolTest {
         val transport = FakeTransport()
         val repository = WorkbenchRepository(transport, StandardTestDispatcher(testScheduler))
         try {
-            repository.setEndpoint("https://example.test")
+            repository.connectService("wss://example.test/ws",serviceCredential)
             val socket = transport.sockets.single(); ready(socket)
             socket.frame(json("type" to "session.updated", "session" to session("second"))); runCurrent()
             repository.openSession("s"); runCurrent()
@@ -155,7 +222,7 @@ class ProtocolTest {
         val transport = FakeTransport()
         val repository = WorkbenchRepository(transport, StandardTestDispatcher(testScheduler))
         try {
-            repository.setEndpoint("https://example.test")
+            repository.connectService("wss://example.test/ws",serviceCredential)
             val socket = transport.sockets.single(); ready(socket); runCurrent()
             repository.openSession("s"); runCurrent()
             advanceTimeBy(90_000); runCurrent()
@@ -169,11 +236,14 @@ class ProtocolTest {
             assertNull(repository.state.value.histories.getValue("s").loadError)
         } finally { repository.dispose() }
     }
-    @Test fun addressRulesPreservePrefixAndRejectCredentialsAndDowngrades() {
-        assertEquals("https://example.test:8443/workbench/",normalizeEndpoint(" https://example.test:8443/workbench "))
-        assertEquals("wss://example.test:8787/ws",normalizeServiceAddress("wss://example.test:8787/ws"))
-        listOf("http://example.test","https://user@example.test","https://example.test/#key","https://example.test/?x=1","https://example.test\\evil").forEach { assertThrows(IllegalArgumentException::class.java) { normalizeEndpoint(it) } }
-        listOf("ws://example.test/ws","wss://example.test/","wss://a:b@example.test/ws","wss://example.test/api/ws").forEach { assertThrows(IllegalArgumentException::class.java) { normalizeServiceAddress(it) } }
+    @Test fun addressesRequireTheServiceSocketAndRejectWebLoginsCredentialsAndDowngrades() {
+        assertEquals("wss://example.test:8787/ws",normalizeServiceAddress(" WSS://example.test:8787/ws "))
+        listOf("http://example.test/ws", "https://example.test/ws", "https://example.test/workbench/",
+            "ws://example.test/ws", "wss://example.test/", "wss://a:b@example.test/ws", "wss://example.test/api/ws",
+            "wss://example.test/ws?token=secret", "wss://example.test/ws#secret", "wss://example.test\\evil/ws").forEach {
+            val error = assertThrows(IllegalArgumentException::class.java) { normalizeServiceAddress(it) }
+            assertFalse(error.message.orEmpty().contains("secret"))
+        }
     }
     @Test fun fragmentsSettleDeduplicatePreservePagesAndClearOnRunCompletion() {
         var h = applySnapshot(History(),json("mode" to "replace","events" to JSONArray().put(event(3,"first")),"hasEarlier" to true))
@@ -208,16 +278,18 @@ class ProtocolTest {
         assertEquals(secondSequence,h.fragments.first().sequence)
         assertEquals(h.fragments.size,h.fragments.map { it.sequence }.distinct().size)
     }
-    @Test fun serviceHandshakeOmitsBrowserProbeAndLogoutForgetsToken() = runTest {
-        val t = FakeTransport().apply { httpHandler = { _,_,_ -> error("Service mode may not use browser APIs") } }
+    @Test fun serviceHandshakeAuthenticatesWithTokenAndLogoutForgetsIt() = runTest {
+        val t = FakeTransport()
         val repo = WorkbenchRepository(t,StandardTestDispatcher(testScheduler))
         try {
             repo.connectService("wss://example.test/ws","local-service-test-credential")
             val s = t.sockets.single(); ready(s); runCurrent()
             assertEquals("auth",s.sent[0].getString("type")); assertEquals(25,s.sent[0].getInt("protocolVersion")); assertFalse(s.sent[0].getBoolean("tunnel"))
-            assertEquals("android-device",s.sent[1].getString("id")); assertTrue(s.direct)
-            repo.activity(); runCurrent(); assertEquals(2,s.sent.size)
+            assertEquals("android-device",s.sent[1].getString("id"))
+            assertEquals(2,s.sent.size)
             assertEquals("online",repo.state.value.status)
+            s.frame(json("type" to "devices","devices" to JSONArray().put(json("id" to "server","server" to true,"ready" to true)))); runCurrent()
+            assertEquals("server",repo.state.value.serverDeviceId)
             s.frame(json("type" to "connection.error","code" to "unauthorized","message" to "拒绝")); runCurrent()
             repo.foreground(false); repo.foreground(true); runCurrent(); advanceTimeBy(60_000); runCurrent()
             assertEquals(1,t.sockets.size); assertFalse(repo.state.value.authenticated)
@@ -227,8 +299,8 @@ class ProtocolTest {
     @Test fun reconnectUsesDurableCursorNeverReplaysMutationAndIgnoresGlobalEvents() = runTest {
         val t = FakeTransport(); val repo = WorkbenchRepository(t,StandardTestDispatcher(testScheduler))
         try {
-            repo.setEndpoint("https://example.test/path"); val first = t.sockets.single(); ready(first); runCurrent()
-            assertEquals("wss://example.test/path/api/ws",first.url)
+            repo.connectService("wss://example.test/ws",serviceCredential); val first = t.sockets.single(); ready(first); runCurrent()
+            assertEquals("wss://example.test/ws",first.url)
             val select = async { repo.selectSession("s") }; runCurrent()
             first.frame(json("type" to "session.event","event" to event(90,"unsubscribed"))); runCurrent()
             assertTrue(repo.state.value.histories.getValue("s").events.isEmpty())
@@ -249,7 +321,7 @@ class ProtocolTest {
     @Test fun protocolMismatchAndCertificateFailureNeverAutoRetry() = runTest {
         val t = FakeTransport(); val repo = WorkbenchRepository(t,StandardTestDispatcher(testScheduler))
         try {
-            repo.setEndpoint("https://example.test"); val s = t.sockets.single()
+            repo.connectService("wss://example.test/ws",serviceCredential); val s = t.sockets.single()
             s.frame(json("type" to "ready","protocolVersion" to 24,"sessions" to JSONArray(),"browser" to JSONObject())); runCurrent()
             repo.foreground(true); runCurrent(); advanceTimeBy(60_000); runCurrent(); assertEquals(1,t.sockets.size)
             repo.reconnect(); t.sockets.last().observer.failed(CertificateFailure("pin mismatch")); runCurrent()
@@ -259,7 +331,7 @@ class ProtocolTest {
     @Test fun catalogRequestsDeduplicateGateWritesAndPreserveLatestPermissions() = runTest {
         val t = FakeTransport(); val repo = WorkbenchRepository(t,StandardTestDispatcher(testScheduler))
         try {
-            repo.setEndpoint("https://example.test"); val s = t.sockets.single(); ready(s); runCurrent()
+            repo.connectService("wss://example.test/ws",serviceCredential); val s = t.sockets.single(); ready(s); runCurrent()
             val first = async { repo.loadModelCatalog("s") }; val second = async { repo.loadModelCatalog("s") }; runCurrent()
             assertEquals(1,s.sent.count { it.optString("type") == "session.status" })
             val requestId = s.sent.last().getString("requestId")
@@ -272,42 +344,171 @@ class ProtocolTest {
             s.response(); runCurrent(); configure.await()
         } finally { repo.dispose() }
     }
-    @Test fun staleEndpointProbeCannotRestorePreviousLoginAndCommandsReturnPayload() = runTest {
-        val t = FakeTransport(); val slow = CompletableDeferred<JSONObject>()
-        t.httpHandler = { endpoint,_,_ -> if (endpoint.contains("slow")) slow.await() else json("authenticated" to false) }
-        val repo = WorkbenchRepository(t,StandardTestDispatcher(testScheduler))
+    @Test fun connectionPreloadsOneRealCatalogPerAvailableDeviceWithoutSelectingOrCreatingChats() = runTest {
+        val t = FakeTransport(); val repo = WorkbenchRepository(t, StandardTestDispatcher(testScheduler))
+        fun deviceSession(id: String, device: String, server: Boolean = false) = session(id).put("device", json("id" to device, "server" to server))
         try {
-            val switching = async { repo.setEndpoint("https://slow.test") }; runCurrent()
-            repo.setEndpoint("https://new.test"); slow.complete(json("authenticated" to true)); runCurrent(); switching.await()
-            assertEquals("https://new.test/",repo.state.value.endpoint); assertEquals("login",repo.state.value.status); assertTrue(t.sockets.isEmpty())
-            t.httpHandler = { _,_,_ -> json("authenticated" to true) }; repo.reconnect(); val s = t.sockets.single(); ready(s); runCurrent()
-            val request = async { repo.command("web.settings.get") }; runCurrent(); val id = s.sent.last().getString("requestId")
-            s.frame(json("type" to "web.settings.state","requestId" to id,"values" to json("totpEnabled" to true))); s.response(id); runCurrent()
-            assertEquals("web.settings.state",request.await().getString("type")); assertTrue(repo.state.value.totpEnabled)
+            repo.connectService("wss://example.test/ws", serviceCredential)
+            val socket = t.sockets.single()
+            val rows = JSONArray().put(deviceSession("s", "server", true)).put(deviceSession("s2", "server", true))
+                .put(deviceSession("remote", "pc")).put(deviceSession("offline", "offline"))
+                .put(deviceSession("phone", "android-device"))
+            socket.frame(json("type" to "ready", "protocolVersion" to 25, "sessions" to rows)); runCurrent()
+            assertEquals(listOf("s"), socket.sent.filter { it.optString("type") == "session.status" }.map { it.getString("sessionId") })
+            val presence = json("type" to "devices", "devices" to JSONArray()
+                .put(json("id" to "server", "server" to true, "ready" to true))
+                .put(json("id" to "pc", "ready" to true)).put(json("id" to "android-device", "ready" to true)))
+            socket.frame(presence); socket.frame(presence); runCurrent()
+            val reads = socket.sent.filter { it.optString("type") == "session.status" }
+            assertEquals(listOf("s", "remote"), reads.map { it.getString("sessionId") })
+            assertTrue(reads.none { it.getBoolean("quota") })
+            assertEquals(setOf("server", "pc"), repo.state.value.modelCatalogLoading)
+            for ((index, request) in reads.withIndex()) {
+                val capabilities = event(10L + index, id = request.getString("sessionId")).put("payload", json("type" to "native.capabilities",
+                    "models" to JSONArray().put(json("value" to "real-$index", "displayName" to "Real model $index"))))
+                socket.frame(json("type" to "session.event", "event" to capabilities)); socket.response(request.getString("requestId"))
+            }
+            runCurrent()
+            assertEquals("real-0", repo.state.value.modelCatalogs.getValue("server").models.single().value)
+            assertEquals("real-1", repo.state.value.modelCatalogs.getValue("pc").models.single().value)
+            assertTrue(repo.state.value.modelCatalogLoading.isEmpty()); assertTrue(repo.state.value.modelCatalogErrors.isEmpty())
+            assertNull(repo.state.value.selectedId); assertTrue(repo.state.value.histories.isEmpty())
+            assertFalse(socket.sent.any { it.optString("type") in setOf("server.session.create", "message.send", "session.configure", "session.subscribe") })
         } finally { repo.dispose() }
     }
-    @Test fun endpointWritesAndNoticeClearingCannotBeReordered() = runTest {
+    @Test fun emptyAccountWaitsForFirstSessionAndBusySessionsWaitUntilIdle() = runTest {
+        val t = FakeTransport(); val repo = WorkbenchRepository(t, StandardTestDispatcher(testScheduler))
+        try {
+            repo.connectService("wss://example.test/ws", serviceCredential); val socket = t.sockets.single()
+            socket.frame(json("type" to "ready", "protocolVersion" to 25, "sessions" to JSONArray()))
+            socket.frame(json("type" to "devices", "devices" to JSONArray().put(json("id" to "server", "server" to true, "ready" to true)))); runCurrent()
+            assertFalse(socket.sent.any { it.optString("type") in setOf("server.session.create", "session.status") })
+            val busy = session().put("activeRun", json("id" to "busy", "status" to "running"))
+            socket.frame(json("type" to "session.updated", "session" to busy)); runCurrent()
+            assertFalse(socket.sent.any { it.optString("type") == "session.status" })
+            socket.frame(json("type" to "session.updated", "session" to session())); runCurrent()
+            assertEquals("s", socket.sent.single { it.optString("type") == "session.status" }.getString("sessionId"))
+            assertNull(repo.state.value.selectedId)
+        } finally { repo.dispose() }
+    }
+    @Test fun sameDeviceCatalogReadsShareOneRequestWithoutBlockingOtherConversations() = runTest {
+        val t = FakeTransport(); val repo = WorkbenchRepository(t, StandardTestDispatcher(testScheduler))
+        try {
+            repo.connectService("wss://example.test/ws", serviceCredential); val socket = t.sockets.single()
+            socket.frame(json("type" to "ready", "protocolVersion" to 25, "sessions" to JSONArray().put(session()).put(session("s2"))))
+            socket.frame(json("type" to "devices", "devices" to JSONArray().put(json("id" to "server", "server" to true)))); runCurrent()
+            val read = socket.sent.single { it.optString("type") == "session.status" }
+            val duplicate = async { repo.loadModelCatalog("s2") }; runCurrent()
+            val otherChat = async { repo.command("message.send", json("sessionId" to "s2", "text" to "Fixture message")) }; runCurrent()
+            assertEquals(1, socket.sent.count { it.optString("type") == "session.status" })
+            assertEquals("s2", socket.sent.last().getString("sessionId")); assertEquals("message.send", socket.sent.last().getString("type"))
+            socket.response(); runCurrent(); otherChat.await()
+            assertFalse(duplicate.isCompleted)
+            socket.frame(json("type" to "session.event", "event" to event(20).put("payload", json("type" to "native.capabilities",
+                "models" to JSONArray().put(json("value" to "actual", "displayName" to "Actual model"))))))
+            socket.response(read.getString("requestId")); runCurrent(); duplicate.await()
+            assertEquals("actual", repo.state.value.modelCatalogs.getValue("server").models.single().value)
+        } finally { repo.dispose() }
+    }
+    @Test fun catalogFailureHasVisibleStateNoAutomaticRetryLoopAndManualRetryCanRecover() = runTest {
+        val t = FakeTransport(); val repo = WorkbenchRepository(t, StandardTestDispatcher(testScheduler))
+        try {
+            repo.connectService("wss://example.test/ws", serviceCredential); val socket = t.sockets.single(); ready(socket)
+            val presence = json("type" to "devices", "devices" to JSONArray().put(json("id" to "server", "server" to true)))
+            socket.frame(presence); runCurrent()
+            socket.response(); runCurrent()
+            assertTrue(repo.state.value.modelCatalogErrors.getValue("server").contains("未返回模型目录"))
+            assertTrue(repo.state.value.modelCatalogs.isEmpty()); assertTrue(repo.state.value.modelCatalogLoading.isEmpty())
+            socket.frame(presence); socket.frame(json("type" to "session.updated", "session" to session())); runCurrent()
+            assertEquals(1, socket.sent.count { it.optString("type") == "session.status" })
+            val retry = async { repo.loadModelCatalog("s") }; runCurrent()
+            assertTrue(repo.state.value.modelCatalogErrors.isEmpty()); assertEquals(setOf("server"), repo.state.value.modelCatalogLoading)
+            socket.frame(json("type" to "session.event", "event" to event(20).put("payload", json("type" to "native.capabilities",
+                "models" to JSONArray().put(json("value" to "real", "displayName" to "Real model"))))))
+            socket.response(); runCurrent(); retry.await()
+            assertEquals("real", repo.state.value.modelCatalogs.getValue("server").models.single().value)
+            assertTrue(repo.state.value.modelCatalogErrors.isEmpty()); assertTrue(repo.state.value.modelCatalogLoading.isEmpty())
+        } finally { repo.dispose() }
+    }
+    @Test fun reconnectRefreshesCatalogAndOldReadCannotContaminateNewServiceState() = runTest {
+        val t = FakeTransport(); val repo = WorkbenchRepository(t, StandardTestDispatcher(testScheduler))
+        val presence = json("type" to "devices", "devices" to JSONArray().put(json("id" to "server", "server" to true)))
+        try {
+            repo.connectService("wss://example.test/ws", serviceCredential); val old = t.sockets.single()
+            ready(old); old.frame(presence); runCurrent()
+            assertEquals(1, old.sent.count { it.optString("type") == "session.status" })
+            repo.reconnect(); val next = t.sockets.last(); ready(next); next.frame(presence); runCurrent()
+            assertEquals(1, next.sent.count { it.optString("type") == "session.status" })
+            assertEquals(setOf("server"), repo.state.value.modelCatalogLoading)
+            old.response(); runCurrent()
+            assertTrue(repo.state.value.modelCatalogErrors.isEmpty()); assertEquals(setOf("server"), repo.state.value.modelCatalogLoading)
+            repo.connectService("wss://new.test/ws", serviceCredential); runCurrent()
+            next.response(); runCurrent()
+            assertTrue(repo.state.value.modelCatalogLoading.isEmpty()); assertTrue(repo.state.value.modelCatalogErrors.isEmpty())
+            assertTrue(repo.state.value.modelCatalogs.isEmpty())
+        } finally { repo.dispose() }
+    }
+    @Test fun staleCredentialReadCannotAuthenticatePreviousEndpointAndCommandsReturnPayload() = runTest {
+        val t = FakeTransport(); val slow = CompletableDeferred<Unit>()
+        t.credentialBarrier = { if (it.contains("slow")) slow.await() }
+        val repo = WorkbenchRepository(t,StandardTestDispatcher(testScheduler))
+        try {
+            val switching = async { repo.connectService("wss://slow.test/ws",serviceCredential) }; runCurrent()
+            repo.connectService("wss://new.test/ws",serviceCredential); slow.complete(Unit); runCurrent(); switching.await()
+            assertEquals("wss://new.test/ws",repo.state.value.endpoint); assertEquals(1,t.sockets.size)
+            val s = t.sockets.single(); assertEquals("wss://new.test/ws",s.url); ready(s); runCurrent()
+            val request = async { repo.command("web.settings.get") }; runCurrent(); val id = s.sent.last().getString("requestId")
+            s.frame(json("type" to "web.settings.state","requestId" to id,"values" to json("totpEnabled" to true))); s.response(id); runCurrent()
+            assertEquals("web.settings.state",request.await().getString("type")); assertTrue(repo.state.value.webSettings!!.getBoolean("totpEnabled"))
+        } finally { repo.dispose() }
+    }
+    @Test fun savedHttpsLoginIsRejectedWithoutOpeningASocketOrReadingCredentials() = runTest {
+        val t = FakeTransport().apply { endpoint = "https://legacy.test/workbench/" }
+        val repo = WorkbenchRepository(t,StandardTestDispatcher(testScheduler))
+        try {
+            repo.start()
+            assertEquals("setup",repo.state.value.status)
+            assertEquals("",repo.state.value.endpoint)
+            assertTrue(repo.state.value.error.orEmpty().contains("wss://"))
+            assertTrue(t.sockets.isEmpty()); assertTrue(t.credentialReads.isEmpty())
+            assertFalse(repo.state.value.authenticated)
+        } finally { repo.dispose() }
+    }
+    @Test fun invalidWebLoginCannotReplaceTheConnectedServiceOrStoreItsCredential() = runTest {
+        val t = FakeTransport(); val repo = WorkbenchRepository(t,StandardTestDispatcher(testScheduler))
+        try {
+            repo.connectService("wss://example.test/ws",serviceCredential)
+            val socket = t.sockets.single(); ready(socket); runCurrent()
+            assertTrue(runCatching { repo.setEndpoint("https://other.test/") }.isFailure)
+            assertTrue(runCatching { repo.connectService("https://other.test/ws","other-service-credential-0123456789") }.isFailure)
+            assertTrue(runCatching { repo.setFingerprint("https://other.test/","AB".repeat(32)) }.isFailure)
+            assertEquals("online",repo.state.value.status); assertFalse(socket.closed)
+            assertEquals(mapOf("wss://example.test/ws" to serviceCredential),t.credentials)
+            assertEquals(1,t.sockets.size)
+        } finally { repo.dispose() }
+    }
+    @Test fun endpointAndCredentialClearingWritesCannotBeReordered() = runTest {
         val t = FakeTransport(); val barrier = CompletableDeferred<Unit>(); val repo = WorkbenchRepository(t,StandardTestDispatcher(testScheduler))
         t.endpointBarrier = { if (it.contains("first")) barrier.await() }
         try {
-            val first = async { repo.setEndpoint("https://first.test") }; runCurrent()
-            val second = async { repo.setEndpoint("https://second.test") }; runCurrent()
+            val first = async { repo.connectService("wss://first.test/ws",serviceCredential) }; runCurrent()
+            val second = async { repo.connectService("wss://second.test/ws",serviceCredential) }; runCurrent()
             assertEquals("",t.endpoint)
             barrier.complete(Unit); runCurrent(); first.await(); second.await()
-            assertEquals("https://second.test/",t.endpoint); assertEquals(1,t.sockets.size)
+            assertEquals("wss://second.test/ws",t.endpoint); assertEquals(1,t.sockets.size)
             val s = t.sockets.single(); ready(s); runCurrent()
             val prefsBarrier = CompletableDeferred<Unit>()
             t.preferenceBarrier = { _,prefs -> if (prefs.notices.isNotEmpty()) prefsBarrier.await() }
             s.frame(json("type" to "session.event","event" to event(1).put("payload",json("type" to "run.status","status" to "completed")))); runCurrent()
             val logout = async { repo.logout() }; runCurrent(); assertFalse(logout.isCompleted)
             prefsBarrier.complete(Unit); runCurrent(); logout.await()
-            assertTrue(t.preferences.getValue("https://second.test/").notices.isEmpty())
+            assertEquals("",t.endpoint); assertFalse(t.credentials.containsKey("wss://second.test/ws")); assertTrue(repo.state.value.notices.isEmpty())
         } finally { repo.dispose() }
     }
     @Test fun staleSocketFramesCannotMutateNewConnectionAndHandshakeTimeoutBacksOff() = runTest {
         val t = FakeTransport(); val repo = WorkbenchRepository(t,StandardTestDispatcher(testScheduler))
         try {
-            repo.setEndpoint("https://example.test"); val first = t.sockets.single()
+            repo.connectService("wss://example.test/ws",serviceCredential); val first = t.sockets.single()
             advanceTimeBy(15_000); runCurrent(); assertEquals("offline",repo.state.value.status)
             advanceTimeBy(749); runCurrent(); assertEquals(1,t.sockets.size)
             advanceTimeBy(1); runCurrent(); assertEquals(2,t.sockets.size)
@@ -322,7 +523,7 @@ class ProtocolTest {
     @Test fun subscriptionFailureResetsLoadingAndQuotaRefreshIsDeduplicated() = runTest {
         val t = FakeTransport(); val repo = WorkbenchRepository(t,StandardTestDispatcher(testScheduler))
         try {
-            repo.setEndpoint("https://example.test"); val s = t.sockets.single(); ready(s); runCurrent()
+            repo.connectService("wss://example.test/ws",serviceCredential); val s = t.sockets.single(); ready(s); runCurrent()
             val load = async { runCatching { repo.selectSession("s") } }; runCurrent(); val request = s.sent.last().getString("requestId")
             s.frame(json("type" to "response","requestId" to request,"ok" to false,"message" to "暂时无法读取")); runCurrent(); assertTrue(load.await().isFailure)
             val history = repo.state.value.histories.getValue("s"); assertFalse(history.loading); assertEquals("暂时无法读取",history.loadError)
@@ -338,7 +539,7 @@ class ProtocolTest {
     @Test fun cancellationAndContinuationUseAcknowledgedCommandsWithoutMutationReplay() = runTest {
         val t = FakeTransport(); val repo = WorkbenchRepository(t,StandardTestDispatcher(testScheduler))
         try {
-            repo.setEndpoint("https://example.test"); val socket = t.sockets.single(); ready(socket); runCurrent()
+            repo.connectService("wss://example.test/ws",serviceCredential); val socket = t.sockets.single(); ready(socket); runCurrent()
             val subscribe = async { repo.selectSession("s") }; runCurrent()
             socket.frame(json("type" to "session.snapshot","session" to session(),"mode" to "replace","events" to JSONArray().put(event(1,"initial"))))
             socket.response(); runCurrent(); subscribe.await()
@@ -361,7 +562,7 @@ class ProtocolTest {
     @Test fun earlierHistoryUsesOldestDurableCursorSuppressesOverlapAndCanRetryFailure() = runTest {
         val t = FakeTransport(); val repo = WorkbenchRepository(t,StandardTestDispatcher(testScheduler))
         try {
-            repo.setEndpoint("https://example.test"); val socket = t.sockets.single(); ready(socket); runCurrent()
+            repo.connectService("wss://example.test/ws",serviceCredential); val socket = t.sockets.single(); ready(socket); runCurrent()
             val subscribe = async { repo.selectSession("s") }; runCurrent()
             socket.frame(json("type" to "session.snapshot","session" to session(),"mode" to "replace","hasEarlier" to true,"events" to JSONArray().put(event(50)).put(event(60))))
             socket.response(); runCurrent(); subscribe.await()
@@ -383,7 +584,7 @@ class ProtocolTest {
     @Test fun endpointDisconnectClearsTransientStateAndCannotRestorePreviousSessionData() = runTest {
         val t = FakeTransport(); val repo = WorkbenchRepository(t,StandardTestDispatcher(testScheduler))
         try {
-            repo.setEndpoint("https://first.test"); val first = t.sockets.single(); ready(first); runCurrent()
+            repo.connectService("wss://first.test/ws",serviceCredential); val first = t.sockets.single(); ready(first); runCurrent()
             val subscribe = async { repo.selectSession("s") }; runCurrent()
             first.frame(json("type" to "session.snapshot","session" to session(),"mode" to "replace","events" to JSONArray().put(event(10,"Saved history"))))
             first.response(); runCurrent(); subscribe.await()
@@ -393,17 +594,17 @@ class ProtocolTest {
             assertTrue(pending.await().isFailure)
             val offline = repo.state.value.histories.getValue("s")
             assertEquals(listOf(10L),offline.events.map { it.sequence }); assertTrue(offline.fragments.isEmpty()); assertFalse(offline.loading)
-            repo.setEndpoint("https://second.test"); val second = t.sockets.last(); ready(second); runCurrent()
+            repo.connectService("wss://second.test/ws",serviceCredential); val second = t.sockets.last(); ready(second); runCurrent()
             first.frame(json("type" to "session.snapshot","session" to session(),"mode" to "replace","events" to JSONArray().put(event(99,"Old endpoint data"))))
             first.frame(json("type" to "account.state","account" to "Old endpoint account")); runCurrent()
-            assertEquals("https://second.test/",repo.state.value.endpoint); assertTrue(repo.state.value.histories.isEmpty()); assertNull(repo.state.value.account)
+            assertEquals("wss://second.test/ws",repo.state.value.endpoint); assertTrue(repo.state.value.histories.isEmpty()); assertNull(repo.state.value.account)
             assertNull(repo.state.value.selectedId); assertEquals("online",repo.state.value.status)
         } finally { repo.dispose() }
     }
     @Test fun disposalDrainsQueuedPreferenceChangesInOrder() = runTest {
         val t = FakeTransport(); val barrier = CompletableDeferred<Unit>(); val repo = WorkbenchRepository(t,StandardTestDispatcher(testScheduler))
         try {
-            repo.setEndpoint("https://example.test"); ready(t.sockets.single()); runCurrent()
+            repo.connectService("wss://example.test/ws",serviceCredential); ready(t.sockets.single()); runCurrent()
             t.preferenceBarrier = { _,_ -> barrier.await() }
             repo.togglePin("s"); runCurrent()
             repo.togglePin("s"); runCurrent()
@@ -412,7 +613,7 @@ class ProtocolTest {
             barrier.complete(Unit)
             repo.awaitPersistenceDrain()
             assertEquals(listOf(listOf("s"), emptyList<String>()),t.preferenceWrites.map { it.pins })
-            assertTrue(t.preferences.getValue("https://example.test/").pins.isEmpty())
+            assertTrue(t.preferences.getValue("wss://example.test/ws").pins.isEmpty())
         } finally { barrier.complete(Unit); repo.dispose() }
     }
     @Test fun failedCredentialRemovalCannotLeaveForgottenConnectionMarkedOnline() = runTest {

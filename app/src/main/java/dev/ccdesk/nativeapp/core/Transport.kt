@@ -14,13 +14,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import okhttp3.CookieJar
-import okhttp3.Call
 import okhttp3.HttpUrl
-import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
@@ -42,9 +38,7 @@ interface WorkbenchTransport {
     suspend fun fingerprint(endpoint: String): String
     suspend fun setFingerprint(endpoint: String, fingerprint: String)
     suspend fun clearOrigin(endpoint: String)
-    suspend fun clearBrowserSession(endpoint: String)
-    suspend fun http(endpoint: String, route: String, body: JSONObject? = null): JSONObject
-    suspend fun socket(endpoint: String, direct: Boolean, observer: SocketObserver): SocketConnection
+    suspend fun socket(endpoint: String, observer: SocketObserver): SocketConnection
     fun close()
 }
 
@@ -57,13 +51,11 @@ internal class AndroidWorkbenchTransport(context: Context) : WorkbenchTransport 
     private val cleanupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val shutdownComplete = CompletableDeferred<Unit>()
     private var closed = false
-    private data class ClientKey(val origin: String, val pin: String, val direct: Boolean, val websocket: Boolean)
-    private data class Client(val http: OkHttpClient, val cookies: PinnedCookies?)
-    private val clients = mutableMapOf<ClientKey,Client>()
+    private data class ClientKey(val origin: String, val pin: String)
+    private val clients = mutableMapOf<ClientKey,OkHttpClient>()
     private val sockets = mutableMapOf<WebSocket,String>()
-    private val calls = mutableMapOf<Call,String>()
-    private data class Retired(val sockets: List<WebSocket>, val calls: List<Call>, val clients: List<Client>)
-    private fun url(endpoint: String) = parseUrl(endpoint,endpoint.startsWith("wss:",true))
+    private data class Retired(val sockets: List<WebSocket>, val clients: List<OkHttpClient>)
+    private fun url(endpoint: String) = parseUrl(normalizeServiceAddress(endpoint),true)
     private suspend fun <T> withOrigin(endpoint: String, action: suspend (HttpUrl) -> T): T = withContext(Dispatchers.IO) {
         val target = url(endpoint)
         val gate = synchronized(this@AndroidWorkbenchTransport) { originGates.getOrPut(target.origin()) { Mutex() } }
@@ -74,46 +66,42 @@ internal class AndroidWorkbenchTransport(context: Context) : WorkbenchTransport 
         check(normalizeFingerprint(value) == value) { "已保存的证书指纹无效。" }
         return value
     }
-    @Synchronized private fun client(url: HttpUrl, direct: Boolean, websocket: Boolean = false): Client {
+    @Synchronized private fun client(url: HttpUrl): OkHttpClient {
         check(!closed) { "Workbench transport is closed" }
-        val key = ClientKey(url.origin(), storedPin(url.origin()), direct,websocket)
+        val key = ClientKey(url.origin(), storedPin(url.origin()))
         return clients.getOrPut(key) {
-            val jar = if (direct) null else PinnedCookies(secrets,key.origin,key.pin)
-            val http=secureClient(key.origin,key.pin,jar ?: CookieJar.NO_COOKIES)
+            val http = secureClient(key.origin,key.pin)
             // OkHttp suspends the read timeout while waiting for a frame header, but
             // restores it while reading the payload. A large history must not inherit
             // the short HTTP read timeout. The repository bounds history reads separately.
             // Pongs cannot overtake a large, unfragmented history frame. Allow two 30-second
             // intervals: real 459 KB snapshots can take ~37 seconds on a slow service link.
             // A silent peer still fails within about a minute; no business frame is used as a ping.
-            Client(if(websocket)http.newBuilder().readTimeout(90,TimeUnit.SECONDS).pingInterval(30,TimeUnit.SECONDS).build()else http,jar)
+            http.newBuilder().readTimeout(90,TimeUnit.SECONDS).pingInterval(30,TimeUnit.SECONDS).build()
         }
     }
     @Synchronized private fun retire(origin: String?): Retired {
         val retiredSockets = sockets.filterValues { origin == null || it == origin }.keys.toList()
         retiredSockets.forEach(sockets::remove)
-        val retiredCalls = calls.filterValues { origin == null || it == origin }.keys.toList()
-        retiredCalls.forEach(calls::remove)
         val keys = clients.keys.filter { origin == null || it.origin == origin }
         val retiredClients = keys.mapNotNull(clients::remove)
-        // Retire synchronously before releasing the lock. An old response can no longer save a cookie.
-        retiredClients.forEach { it.cookies?.retire() }
-        return Retired(retiredSockets,retiredCalls,retiredClients)
+        return Retired(retiredSockets,retiredClients)
     }
     private fun closeNetwork(resources: Retired) {
         // TLS close_notify can write to the network, including from ConnectionPool.evictAll().
         // This function is called only on Dispatchers.IO and never while holding the state lock.
         resources.sockets.forEach(WebSocket::cancel)
-        resources.calls.forEach(Call::cancel)
-        resources.clients.forEach { it.http.dispatcher.cancelAll(); it.http.connectionPool.evictAll() }
+        resources.clients.forEach { it.dispatcher.cancelAll(); it.connectionPool.evictAll() }
     }
     private fun clear(url: HttpUrl) {
         closeNetwork(retire(url.origin()))
-        secrets.clearCookies(url.origin())
         secrets.write(secrets.credentialName(url.newBuilder().encodedPath("/ws").build()),"")
     }
     override suspend fun getEndpoint() = withContext(Dispatchers.IO) { prefs.getString("endpoint","").orEmpty() }
-    override suspend fun setEndpoint(endpoint: String) = withContext(Dispatchers.IO) { check(prefs.edit().putString("endpoint",endpoint).commit()); Unit }
+    override suspend fun setEndpoint(endpoint: String) = withContext(Dispatchers.IO) {
+        val address = if (endpoint.isBlank()) "" else normalizeServiceAddress(endpoint)
+        check(prefs.edit().putString("endpoint",address).commit()); Unit
+    }
     override suspend fun readPreferences(endpoint: String) = withContext(Dispatchers.IO) {
         runCatching {
             val data = JSONObject(prefs.getString("preferences:$endpoint","{}").orEmpty())
@@ -138,31 +126,8 @@ internal class AndroidWorkbenchTransport(context: Context) : WorkbenchTransport 
         }
     }
     override suspend fun clearOrigin(endpoint: String) = withOrigin(endpoint) { clear(it) }
-    override suspend fun clearBrowserSession(endpoint: String) = withOrigin(normalizeEndpoint(endpoint)) { target ->
-        secrets.write(secrets.cookieName(target.origin(),storedPin(target.origin()),target.encodedPath),"")
-    }
-    override suspend fun http(endpoint: String, route: String, body: JSONObject?): JSONObject = withOrigin(normalizeEndpoint(endpoint)) { base ->
-        require((route == "session" && body == null) || (route in setOf("login","logout") && body != null)) { "Unsupported workbench request" }
-        val target = base.resolve("api/$route")!!
-        val request = Request.Builder().url(target).header("Origin",target.origin()).header("Accept","application/json")
-        if (body != null) request.post(body.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
-        val call = synchronized(this@AndroidWorkbenchTransport) {
-            client(target,false).http.newCall(request.build()).also { calls[it] = target.origin() }
-        }
-        try {
-            call.execute().use { response ->
-                val data = runCatching { JSONObject(response.body?.string().orEmpty()) }.getOrNull()
-                check(response.isSuccessful) { data?.optString("error")?.takeIf { it.isNotEmpty() } ?: "工作台返回 HTTP ${response.code}，请核对入口地址。" }
-                data ?: error("此地址没有返回工作台数据，请核对入口路径。")
-            }
-        } catch (error: Exception) { throw networkError(error) }
-        finally { synchronized(this@AndroidWorkbenchTransport) { calls.remove(call) } }
-    }
-    override suspend fun socket(endpoint: String, direct: Boolean, observer: SocketObserver): SocketConnection = withOrigin(endpoint) { target ->
-        require(endpoint.startsWith("wss:",true)) { "Expected a secure WebSocket address" }
-        require(if (direct) target.encodedPath == "/ws" else target.encodedPath.endsWith("/api/ws"))
+    override suspend fun socket(endpoint: String, observer: SocketObserver): SocketConnection = withOrigin(endpoint) { target ->
         val request = Request.Builder().url(target)
-        if (!direct) request.header("Origin",target.origin())
         val listener = object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) = observer.opened()
             override fun onMessage(webSocket: WebSocket, text: String) = observer.message(text)
@@ -171,7 +136,7 @@ internal class AndroidWorkbenchTransport(context: Context) : WorkbenchTransport 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) { synchronized(this@AndroidWorkbenchTransport) { sockets.remove(webSocket) }; observer.failed(networkError(t)) }
         }
         val websocket = synchronized(this@AndroidWorkbenchTransport) {
-            client(target,direct,true).http.newWebSocket(request.build(),listener).also { sockets[it] = target.origin() }
+            client(target).newWebSocket(request.build(),listener).also { sockets[it] = target.origin() }
         }
         // Keep closing sockets tracked until onClosed/onFailure, so disposal can cancel an unresponsive peer.
         object : SocketConnection { override fun send(text: String) = websocket.send(text); override fun close() { websocket.close(1000,null) } }

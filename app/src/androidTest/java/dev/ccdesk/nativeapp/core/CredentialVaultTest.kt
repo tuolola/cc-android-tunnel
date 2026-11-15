@@ -40,26 +40,24 @@ class CredentialVaultTest {
             assertEquals("",secrets.read("damaged")); assertFalse(prefs.contains("damaged"))
         } finally { context.clear() }
     }
-    @Test fun browserLogoutIsEntryScopedAndChangingTrustClearsOriginCredentials() = runBlocking {
+    @Test fun changingTrustClearsOnlyTheMatchingServiceCredential() = runBlocking {
         val context = IsolatedContext(InstrumentationRegistry.getInstrumentation().targetContext)
         val transport = AndroidWorkbenchTransport(context)
         try {
-            val origin = "https://example.test"
-            val endpoint = "$origin/workbench/"
             val service = "wss://example.test/ws"
+            val otherService = "wss://other.test/ws"
             val firstPin = "AB".repeat(32)
-            transport.setFingerprint(endpoint,firstPin)
+            transport.setFingerprint(service,firstPin)
             transport.saveCredential(service,"test-only-service-credential-0123456789")
-            val secrets = PinnedSecrets(context)
-            val firstCookie = secrets.cookieName(origin,firstPin,"/workbench/")
-            val secondCookie = secrets.cookieName(origin,firstPin,"/other/")
-            secrets.write(firstCookie,"test-cookie-one"); secrets.write(secondCookie,"test-cookie-two")
+            transport.saveCredential(otherService,"another-test-service-credential-0123456789")
             assertEquals(firstPin,transport.fingerprint(service))
-            transport.clearBrowserSession(endpoint)
-            assertEquals("",secrets.read(firstCookie)); assertEquals("test-cookie-two",secrets.read(secondCookie))
-            assertTrue(transport.credential(service).isNotEmpty())
-            transport.setFingerprint(endpoint,"CD".repeat(32))
-            assertEquals("",secrets.read(secondCookie)); assertEquals("",transport.credential(service))
+            transport.setFingerprint(service,"CD".repeat(32))
+            assertEquals("",transport.credential(service))
+            assertEquals("another-test-service-credential-0123456789",transport.credential(otherService))
+            transport.saveCredential(service,"replacement-service-credential-0123456789")
+            transport.clearOrigin(service)
+            assertEquals("",transport.credential(service))
+            assertEquals("another-test-service-credential-0123456789",transport.credential(otherService))
         } finally { transport.close(); transport.awaitClosed(); context.clear() }
     }
 }
