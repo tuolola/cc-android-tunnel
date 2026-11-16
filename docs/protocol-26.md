@@ -7,7 +7,7 @@
 | Android 构建 | 协议 | 对应上游服务端 | 状态 |
 | --- | --- | --- | --- |
 | GitHub 公开下载的 `v1.0.4-native` | 25 | `v0.3.14` | 已发布的公开测试 APK；原下载链接与校验值保持不变 |
-| `1.0.6-native` / versionCode 12 | 26 | `v0.3.15` | 待发布的公开测试构建；已覆盖安装并完成真实服务只读检查，见文末 |
+| `1.0.6-native` / versionCode 12 | 26 | `v0.3.15` | 已发布的公开测试版；[Release 与附件](https://github.com/tuolola/cc-android-tunnel/releases/tag/v1.0.6-native)，覆盖安装及真实服务验证见文末 |
 | `1.0.5-native` / versionCode 11 | 26 | `v0.3.15` | 已发布的公开测试版；[Release 与附件](https://github.com/tuolola/cc-android-tunnel/releases/tag/v1.0.5-native)，构建与验证见文末 |
 
 上游 v0.3.15 的桌面客户端、`ccdt` 和服务端需配套升级。Android 的 `1.0.x-native` 是独立版本号，不能仅凭名称判断协议兼容。服务端明确拒绝协议不匹配的连接并以 WebSocket `4002` 关闭；本次适配不意味着同时兼容协议 25，Android APK 本身不会升级服务器。本次联调服务的实际升级与验证另见文末。[发布说明](https://github.com/sun168567/cc-desk-tunnel/releases/tag/v0.3.15)、[服务端检查](https://github.com/sun168567/cc-desk-tunnel/blob/v0.3.15/apps/server/src/server.ts#L1834)
@@ -119,7 +119,7 @@ APK 大小 **13,628,957 字节**，SHA-256 为 `539891255c66b5297bed16e849d9e944
 
 真机 UI 另验证侧栏打开已有长会话、上滚后出现并点击“回到最新消息”，以及退出至桌面再返回；已加载历史正常显示，无残留加载提示。安装后的 `base.apk` SHA-256 与交付 APK 完全一致。
 
-本版尚未重跑完整设备套件、真实账号消息与工具执行，以及旧版浏览器下载至系统安装的完整更新链路。发布后匿名下载校验与公开更新源检查待发布完成后另行登记；1.0.5 的已通过结果作为下方历史证据保留，不并入 1.0.6 的测试数量。
+本版尚未重跑完整设备套件、真实账号消息与工具执行，以及旧版浏览器下载至系统安装的完整更新链路。[v1.0.6-native](https://github.com/tuolola/cc-android-tunnel/releases/tag/v1.0.6-native) 已作为公开测试版发布；匿名下载的 APK 与 `SHA256SUMS.txt` 核对一致。真机 `AppUpdateLiveTest` 在 2.242 秒内通过，公开更新源返回 v1.0.6-native 且包含 APK 校验元数据。发布 tag 指向已验证提交 `63e2810a495be9bf8b80d2e0b295a58f3fe5abde`。1.0.5 的已通过结果作为下方历史证据保留，不并入 1.0.6 的测试数量。
 
 ### 1.0.5-native 历史验证
 

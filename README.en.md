@@ -339,7 +339,7 @@ Read-only history and pagination checks over real Wi-Fi passed against **v0.3.15
 
 Physical UI checks also covered opening an existing long conversation from the sidebar, scrolling up and using “Jump to latest”, then returning from the launcher; loaded history remained visible without a stale loading indicator. The installed `base.apk` SHA-256 matches the delivered APK exactly.
 
-The complete device suite, real-account messaging/tool execution and the older-app browser-download/system-install update path were not rerun. Post-publication download checksums and the public update feed will be recorded separately after release. See the [protocol verification record (Chinese)](./docs/protocol-26.md#本轮验证).
+The complete device suite, real-account messaging/tool execution and the older-app browser-download/system-install update path were not rerun. [v1.0.6-native](https://github.com/tuolola/cc-android-tunnel/releases/tag/v1.0.6-native) is published as a prerelease. The anonymously downloaded APK matches `SHA256SUMS.txt`. The physical-phone `AppUpdateLiveTest` passed in 2.242 seconds, finding v1.0.6-native in the public feed with APK checksum metadata. See the [protocol verification record (Chinese)](./docs/protocol-26.md#本轮验证).
 
 ### 1.0.5-native protocol 26 and warm theme — 2026-11-16
 
