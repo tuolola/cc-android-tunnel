@@ -91,7 +91,9 @@ private class ComposerEditText(context:Context):AppCompatEditText(context) {
         // Natural text layout grows to six lines, then the editor itself scrolls the caret into view.
         val maximum=if(MeasureSpec.getMode(heightMeasureSpec)==MeasureSpec.UNSPECIFIED)(144*scale).toInt() else minOf((144*scale).toInt(),MeasureSpec.getSize(heightMeasureSpec))
         super.onMeasure(widthMeasureSpec,MeasureSpec.makeMeasureSpec(maximum,MeasureSpec.AT_MOST))
-        val desired=(if(text.isNullOrEmpty())26*scale else measuredHeight.toFloat()).toInt().coerceIn(minOf((26*scale).toInt(),maximum),maximum)
+        // The native measurement also includes a wrapping hint. Empty text must not
+        // collapse that layout to one line at larger font scales or narrow widths.
+        val desired=measuredHeight.coerceIn(minOf((26*scale).toInt(),maximum),maximum)
         super.onMeasure(widthMeasureSpec,MeasureSpec.makeMeasureSpec(desired,MeasureSpec.EXACTLY))
     }
 }

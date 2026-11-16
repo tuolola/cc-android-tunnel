@@ -222,9 +222,9 @@ class SilentPeerRecoveryTest {
                         requests.add(ObservedRequest(connection,frame))
                         when (frame.optString("type")) {
                             "auth" -> {
-                                require(frame.optInt("protocolVersion") == 25 && frame.optString("token") == token)
+                                require(frame.optInt("protocolVersion") == 26 && frame.optString("token") == token)
                                 if (connection == 1) firstAuthenticatedAt.set(SystemClock.elapsedRealtime())
-                                text(output,json("type" to "ready","protocolVersion" to 25,"sessions" to JSONArray().put(session())))
+                                text(output,json("type" to "ready","protocolVersion" to 26,"sessions" to JSONArray().put(session())))
                             }
                             "session.subscribe" -> {
                                 val after = frame.optLong("afterSequence")

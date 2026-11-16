@@ -6,6 +6,8 @@
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowActionModeOverlay">true</item>
         <item name="android:windowBackground">#faf9f5</item>
-        <item name="colorPrimary">#023c69</item>
+        <item name="colorPrimary">#ad563b</item>
+        <item name="colorAccent">#ad563b</item>
+        <item name="colorControlActivated">#ad563b</item>
     </style>
 </resources>

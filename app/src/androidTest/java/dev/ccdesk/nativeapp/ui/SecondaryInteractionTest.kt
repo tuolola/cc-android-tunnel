@@ -162,7 +162,7 @@ class SecondaryInteractionTest {
         for (alias in listOf("Opus", "Sonnet", "Haiku")) compose.onNodeWithText(alias).assertDoesNotExist()
     }
 
-    @Test fun entryFadeUsesBaselineMidpointAndRemovesWithoutAnExitFade() {
+    @Test fun entryFadeUsesSharedDecelerationAndRemovesWithoutAnExitFade() {
         val visible = mutableStateOf(false)
         compose.mainClock.autoAdvance = false
         compose.setContent {
@@ -176,11 +176,13 @@ class SecondaryInteractionTest {
         // One frame applies the new composition; the next establishes animation time zero.
         compose.mainClock.advanceTimeByFrame()
         compose.mainClock.advanceTimeByFrame()
-        compose.mainClock.advanceTimeBy(80)
+        val sampleTime = 80L
+        compose.mainClock.advanceTimeBy(sampleTime)
         val midpoint = compose.onNodeWithTag("fade-background").captureToImage().toPixelMap()
         val red = midpoint[midpoint.width / 2, midpoint.height / 2].red
-        assertTrue("Expected half opacity at 80/160 ms, actual red=$red", red in .45f.. .55f)
-        compose.mainClock.advanceTimeBy(80)
+        val expectedRed = 1f - DeskMotion.Decelerate.transform(sampleTime.toFloat() / DeskMotion.FadeIn)
+        assertEquals("Entry opacity must follow the shared decelerating fade at ${sampleTime}ms", expectedRed, red, .03f)
+        compose.mainClock.advanceTimeBy(DeskMotion.FadeIn - sampleTime + 32L)
         val finished = compose.onNodeWithTag("fade-background").captureToImage().toPixelMap()
         assertTrue(finished[finished.width / 2, finished.height / 2].red < .02f)
         compose.runOnIdle { visible.value = false }
@@ -243,11 +245,11 @@ class SecondaryInteractionTest {
         } finally { compose.runOnIdle { repository.dispose() } }
     }
 
-    @Test fun modelCloseAcceptsOnlyItsFiveDpHitSlopWithoutChangingLayout() {
+    @Test fun modelCloseUses48DpTouchTargetWithoutChanging32DpLayout() {
         assertModelHeaderHitSlop(extent = 32, hitSlop = 5)
     }
 
-    @Test fun modelBackAcceptsOnlyItsThreeDpHitSlopWithoutChangingLayout() {
+    @Test fun modelBackUses48DpTouchTargetWithoutChanging40DpLayout() {
         assertModelHeaderHitSlop(extent = 40, hitSlop = 3)
     }
 
@@ -310,16 +312,19 @@ class SecondaryInteractionTest {
             .assertWidthIsEqualTo(extent.dp).assertHeightIsEqualTo(extent.dp)
         val host = compose.onNodeWithTag("header-hit-host")
         var expected = 0
-        // Hit each cardinal edge, half a dp inside and outside the original RN hit rectangle.
+        // Both visual sizes expose the same 48dp target. Check each cardinal edge,
+        // half a dp inside/outside, so the larger accessible target cannot grow unbounded.
         for ((horizontal, direction) in listOf(true to 1f, true to -1f, false to 1f, false to -1f)) {
             for (inside in listOf(true, false)) {
-                val distance = extent / 2f + hitSlop + if (inside) -.5f else .5f
+                val distance = 24f + if (inside) -.5f else .5f
                 host.performTouchInput {
                     val delta = direction * distance * (width / 100f)
                     click(if (horizontal) Offset(centerX + delta, centerY) else Offset(centerX, centerY + delta))
                 }
                 if (inside) expected++
                 compose.runOnIdle { assertEquals("extent=$extent, hitSlop=$hitSlop, horizontal=$horizontal, direction=$direction, inside=$inside", expected, clicks.size) }
+                compose.onNodeWithContentDescription("Header action")
+                    .assertWidthIsEqualTo(extent.dp).assertHeightIsEqualTo(extent.dp)
             }
         }
     }

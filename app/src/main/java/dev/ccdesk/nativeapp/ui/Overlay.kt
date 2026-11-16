@@ -67,12 +67,12 @@ val LocalOverlayHost = staticCompositionLocalOf<OverlayHostState?> { null }
     onDismissRequest: () -> Unit,
     alignment: Alignment = Alignment.TopEnd,
     width: Dp = 216.dp,
-    corner: Dp = 24.dp,
+    corner: Dp = 20.dp,
     margin: PaddingValues = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val opacity = remember { Animatable(0f) }
-    val scale = remember { Animatable(.8f) }
+    val scale = remember { Animatable(.94f) }
     var present by remember { mutableStateOf(visible) }
     LaunchedEffect(visible) {
         if (visible) {
@@ -84,7 +84,7 @@ val LocalOverlayHost = staticCompositionLocalOf<OverlayHostState?> { null }
             scale.animateTo(.94f, DeskMotion.menu())
             fade.join()
             present = false
-            scale.snapTo(.8f)
+            scale.snapTo(.94f)
         }
     }
     if (!visible && !present) return
@@ -95,20 +95,20 @@ val LocalOverlayHost = staticCompositionLocalOf<OverlayHostState?> { null }
         Alignment.TopStart -> TransformOrigin(0f, 0f)
         else -> TransformOrigin(1f, 0f)
     }
-    Portal(modal = visible) {
+    Portal(modal = visible || present) {
         BackHandler(enabled = visible, onBack = onDismissRequest)
         Box(Modifier.fillMaxSize()) {
             Box(Modifier.fillMaxSize().then(if (visible) Modifier
                 .pointerInput(Unit) { detectTapGestures { dismiss.value() } }
                 .semantics { contentDescription = "关闭菜单"; role = Role.Button; onClick { dismiss.value(); true } }
-            else Modifier))
+            else BlockPointerInput.clearAndSetSemantics { }))
             Box(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding().padding(margin), contentAlignment = alignment) {
                 val shape = RoundedCornerShape(corner)
                 Column(Modifier.widthIn(max = width).fillMaxWidth().floatingAlpha { opacity.value }.graphicsLayer {
                     scaleX = scale.value
                     scaleY = scale.value
                     transformOrigin = origin
-                }.deskFloatingSurface(shape, 28.dp).clip(shape)
+                }.deskFloatingSurface(shape, 12.dp).border(1.dp, LocalDeskColors.current.border, shape).clip(shape)
                     .then(if (visible) AbsorbPointerInput else BlockPointerInput.clearAndSetSemantics { }),
                     content = content)
             }
@@ -152,6 +152,15 @@ val LocalOverlayHost = staticCompositionLocalOf<OverlayHostState?> { null }
 @Composable internal fun rememberModalMotion(visible: Boolean, scrimHandoff: Boolean = false): ModalMotion {
     val motion = remember { ModalMotion(visible) }
     LaunchedEffect(motion, visible, motion.settle) {
+        // An owner can close while a finger is still on the handle (for example via
+        // system Back). Hand the visible drag position to the spring before clearing
+        // the drag override, otherwise the panel freezes and disappears at exit end.
+        if (!visible) motion.dragOffset?.let { offset ->
+            val height = motion.measuredHeight.coerceAtLeast(1f)
+            motion.panel.snapTo(offset / height)
+            motion.scrim.snapTo(DeskMotion.scrimForOffset(offset, height))
+            motion.dragOffset = null
+        }
         val velocity = motion.releaseVelocity.also { motion.releaseVelocity = 0f }
         if (visible) {
             motion.present = true
@@ -167,16 +176,28 @@ val LocalOverlayHost = staticCompositionLocalOf<OverlayHostState?> { null }
     return motion
 }
 
-/** Consumes every pointer event; used on a closing panel so its controls cannot fire again. */
-internal val BlockPointerInput = Modifier.pointerInput(Unit) {
+/**
+ * Consumes every pointer event; used on a closing panel so its controls cannot fire again.
+ * Distinct keys are required for each input mode: Compose can reuse the modifier node
+ * when a live tap detector is replaced, and an unchanged key keeps its old coroutine.
+ */
+internal val BlockPointerInput = Modifier.pointerInput("desk-block-pointer") {
     awaitPointerEventScope { while (true) awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() } }
+}
+/**
+ * Blocks clicks in a departing drawer while allowing its ancestor to finish a reversing
+ * drag. Do not consume a normal UP: the parent distinguishes Android ACTION_CANCEL by
+ * its consumed synthetic release. Consuming DOWN already prevents child click handlers.
+ */
+internal val BlockTapInput = Modifier.pointerInput("desk-block-tap") {
+    awaitPointerEventScope { while (true) awaitPointerEvent(PointerEventPass.Initial).changes.forEach { if (it.pressed) it.consume() } }
 }
 /**
  * Makes a panel a hit target so touches inside it never reach the scrim or content below, and
  * consumes presses its children left unconsumed so no ancestor starts a click. Moves are left
  * alone: consuming them would cancel a child's tap in progress.
  */
-internal val AbsorbPointerInput = Modifier.pointerInput(Unit) {
+internal val AbsorbPointerInput = Modifier.pointerInput("desk-absorb-panel") {
     awaitPointerEventScope { while (true) awaitPointerEvent().changes.forEach { if (it.pressed && !it.previousPressed && !it.isConsumed) it.consume() } }
 }
 
@@ -218,7 +239,7 @@ const val OverlayPanelTag = "overlay-panel"
     LaunchedEffect(visible) { if (!visible) keyboard?.hide() }
     val dismiss = rememberUpdatedState(onDismissRequest)
     val canDismiss = rememberUpdatedState(dismissible)
-    Portal(modal = visible) {
+    Portal(modal = visible || motion.present) {
         BackHandler(enabled = visible) { (onBack ?: onDismissRequest)() }
         val c = LocalDeskColors.current
         val density = LocalDensity.current
@@ -227,20 +248,21 @@ const val OverlayPanelTag = "overlay-panel"
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val wide = centeredWhenWide && maxWidth >= 640.dp
             val windowHeight = constraints.maxHeight.toFloat()
-            // 1. Scrim: window-fixed, opacity only. While closing it stops intercepting input.
+            // 1. Keep the fading surface modal until its final frame. A rapid second
+            // tap must not activate a control revealed underneath a closing panel.
             Box(Modifier.fillMaxSize().testTag(OverlayScrimTag)
                 .graphicsLayer { alpha = motion.dragOffset?.let { DeskMotion.scrimForOffset(it, motion.panelHeight(windowHeight)) } ?: motion.scrim.value }
                 .background(Color.Black.copy(alpha = scrimAlpha))
                 .then(if (visible) Modifier.pointerInput(Unit) { detectTapGestures { if (canDismiss.value) dismiss.value() } }
-                    .semantics { contentDescription = scrimLabel; role = Role.Button; onClick { if (canDismiss.value) dismiss.value(); true } } else Modifier))
+                    .semantics { contentDescription = scrimLabel; role = Role.Button; onClick { if (canDismiss.value) dismiss.value(); true } } else BlockPointerInput.clearAndSetSemantics { }))
             // 2. Panel container: insets apply to the panel only, never to the scrim.
             Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.statusBars).imePadding(), contentAlignment = if (wide) Alignment.Center else Alignment.BottomCenter) {
                 val corner = DeskMotion.SheetCorner
                 val shape = if (wide) RoundedCornerShape(corner) else RoundedCornerShape(topStart = corner, topEnd = corner)
                 val lift = with(density) { DeskMotion.PanelLift.toPx() }
                 val fill = with(density) { DeskMotion.SheetOverscrollFill.toPx() }
-                val drag = Modifier.pointerInput(wide) {
-                    if (wide) return@pointerInput
+                val drag = Modifier.pointerInput(wide, visible) {
+                    if (wide || !visible) return@pointerInput
                     val tracker = VelocityTracker()
                     val distance = DeskMotion.SheetDismissDistance.toPx()
                     val velocityThreshold = DeskMotion.SheetDismissVelocity.toPx()

@@ -45,8 +45,6 @@ import org.json.JSONObject
 import java.net.URI
 import java.util.UUID
 
-private val baselineFadeEasing=Easing{if(it<.5f)2*it*it else 1-(-2*it+2)*(-2*it+2)/2}
-
 @Composable fun WorkbenchApp(repository:WorkbenchRepository,requestedRoute:String?=null,onRouteConsumed:()->Unit={}) = DeskTheme {
     val state by repository.state.collectAsState()
     val keyboard=LocalSoftwareKeyboardController.current
@@ -55,6 +53,7 @@ private val baselineFadeEasing=Easing{if(it<.5f)2*it*it else 1-(-2*it+2)*(-2*it+
     var drawer by rememberSaveable{mutableStateOf(false)}
     var composerFocusRequest by remember{mutableIntStateOf(0)}
     var chatBusy by remember{mutableStateOf(false)}
+    var secondaryPresent by remember{mutableStateOf(false)}
     val navigate:(String)->Unit={val target=it.trim('/');keyboard?.hide();if(target in setOf("","remote"))primaryRoute=target;route=target;drawer=false}
     val newChat:()->Unit={if(!chatBusy){repository.newDraft();composerFocusRequest++;navigate("")}}
     LaunchedEffect(requestedRoute){if(requestedRoute!=null){navigate(requestedRoute);onRouteConsumed()}}
@@ -67,13 +66,13 @@ private val baselineFadeEasing=Easing{if(it<.5f)2*it*it else 1-(-2*it+2)*(-2*it+
     DrawerSurface(drawer,{drawer=it;if(!it)keyboard?.hide()},drawerContent={DrawerContent(repository,state,route,navigate,newChat,!chatBusy)}) {
         Box(Modifier.fillMaxSize().background(LocalDeskColors.current.background)) {
             // The chat stays composed under pushed pages so drafts, scroll position and sheets survive.
-            Box(Modifier.fillMaxSize().then(if(remote||secondary)Modifier.clearAndSetSemantics{}else Modifier)){ChatScreen(repository,state,{drawer=true},navigate,newChat,composerFocusRequest,chatVisible=!remote&&!secondary&&!drawer,onBusyChange={chatBusy=it})}
+            Box(Modifier.fillMaxSize().then(if(remote||secondary||secondaryPresent)Modifier.clearAndSetSemantics{}else Modifier)){ChatScreen(repository,state,{drawer=true},navigate,newChat,composerFocusRequest,chatVisible=!remote&&!secondary&&!secondaryPresent&&!drawer,onBusyChange={chatBusy=it})}
             AnimatedVisibility(remote,
                 enter=slideInHorizontally(DeskMotion.pageOffset){(it*DeskMotion.PageShiftFraction).toInt()}+fadeIn(DeskMotion.fadeIn()),
                 exit=slideOutHorizontally(DeskMotion.pageOffset){(it*DeskMotion.PageShiftFraction).toInt()}+fadeOut(DeskMotion.fadeOut()),label="remote page"){
                 RemoteScreen(repository,navigate,{navigate("")},{drawer=true},active=remote&&!drawer&&!secondary)
             }
-            SecondaryScreen(shownSecondary,repository,navigate,{route=primaryRoute},{navigate("")},visible=secondary,backEnabled=!drawer)
+            SecondaryScreen(shownSecondary,repository,navigate,{route=primaryRoute},{navigate("")},visible=secondary,backEnabled=!drawer,onPresentChange={secondaryPresent=it})
         }
     }
     }
@@ -110,7 +109,7 @@ private val baselineFadeEasing=Easing{if(it<.5f)2*it*it else 1-(-2*it+2)*(-2*it+
     Box(Modifier.fillMaxSize().clipToBounds().pointerInput(open,width){
         awaitEachGesture {
             val down=awaitFirstDown(requireUnconsumed=false)
-            if(!open&&down.position.x>edge)return@awaitEachGesture
+            if(!open&&position.value<=-width&&down.position.x>edge)return@awaitEachGesture
             var start=0f
             val tracker=PlatformPanVelocity();tracker.add(down)
             var accepted=false;var dx=0f
@@ -131,14 +130,15 @@ private val baselineFadeEasing=Easing{if(it<.5f)2*it*it else 1-(-2*it+2)*(-2*it+
             } finally {tracker.close();if(accepted)settleRequest++}
         }
     }) {
-        Box(Modifier.fillMaxSize().then(if(open)Modifier.clearAndSetSemantics{}else Modifier)){content()}
         val x=(drag?:position.value).coerceIn(-width,0f)
+        val covering=open||x> -width
+        Box(Modifier.fillMaxSize().then(if(covering)Modifier.clearAndSetSemantics{}else Modifier)){content()}
         if(x> -width){
             Box(Modifier.fillMaxSize().graphicsLayer{alpha=((x+width)/width).coerceIn(0f,1f)}.background(Color.Black.copy(alpha=DeskMotion.DrawerScrim))
-                .then(if(open)Modifier.pointerInput(Unit){detectTapGestures{onChange(false)}}.semantics{contentDescription="关闭侧栏";onClick{onChange(false);true}}else Modifier))
+                .then(if(open)Modifier.pointerInput(Unit){detectTapGestures{onChange(false)}}.semantics{contentDescription="关闭侧栏";onClick{onChange(false);true}}else BlockTapInput))
         }
         // Keep local search/filter/expansion state mounted, as the baseline hidden drawer does.
-        Box(Modifier.width(drawerWidth).fillMaxHeight().offset{IntOffset(x.toInt(),0)}.then(if(!open)Modifier.clearAndSetSemantics{}else Modifier)){drawerContent()}
+        Box(Modifier.width(drawerWidth).fillMaxHeight().offset{IntOffset(x.toInt(),0)}.then(if(!open)BlockTapInput.clearAndSetSemantics{}else Modifier)){drawerContent()}
     }
 }
 
@@ -154,13 +154,13 @@ private val baselineFadeEasing=Easing{if(it<.5f)2*it*it else 1-(-2*it+2)*(-2*it+
     val pinned=sessions.filter{it.id in state.pins}.sortedByDescending{it.updatedAt}
     val recent=sessions.filter{it.id !in state.pins}.sortedByDescending{it.updatedAt}
     Column(Modifier.fillMaxSize().background(c.sidebar).safeDrawingPadding()) {
-        Row(Modifier.fillMaxWidth().height(76.dp).padding(start=32.dp,end=24.dp),verticalAlignment=Alignment.CenterVertically){
+        Row(Modifier.fillMaxWidth().heightIn(min=76.dp).padding(start=32.dp,end=24.dp),verticalAlignment=Alignment.CenterVertically){
             if(searching){
                 DeskField(query,{query=it},"搜索会话内容",Modifier.weight(1f),autoFocus=true)
                 DeskIconButton("x","关闭会话搜索"){keyboard?.hide();query="";searching=false}
             }else{
                 DeskText(androidx.compose.ui.res.stringResource(R.string.app_name),Modifier.weight(1f),size=23,weight=FontWeight.Bold,maxLines=1)
-                DeskSurfaceIconButton("search","搜索会话"){searching=true}
+                DrawerCircleButton("search","搜索会话"){searching=true}
             }
         }
         Box(Modifier.weight(1f)) {
@@ -181,15 +181,27 @@ private val baselineFadeEasing=Easing{if(it<.5f)2*it*it else 1-(-2*it+2)*(-2*it+
             Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(24.dp).background(Brush.verticalGradient(listOf(c.sidebar.copy(alpha=0f),c.sidebar))))
         }
         Row(Modifier.fillMaxWidth().padding(start=32.dp,end=24.dp,bottom=8.dp,top=4.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween){
-            Row(Modifier.height(48.dp).alpha(if(newChatEnabled)1f else .45f).clip(CircleShape).background(c.primary).deskPressable(c.primary.copy(alpha=.8f),24.dp,enabled=newChatEnabled,onClick=newChat).semantics{contentDescription="新建会话";role=Role.Button;if(!newChatEnabled)disabled()}.padding(horizontal=20.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)){
+            Row(Modifier.heightIn(min=48.dp).alpha(if(newChatEnabled)1f else .45f).clip(CircleShape).background(c.primary).deskPressable(c.primary.copy(alpha=.8f),24.dp,enabled=newChatEnabled,onClick=newChat).semantics{contentDescription="新建会话";role=Role.Button;if(!newChatEnabled)disabled()}.padding(horizontal=20.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)){
                 DeskIcon("square-pen",size=24.dp,tint=c.onPrimary)
                 DeskText("聊天",size=16,color=c.onPrimary,weight=FontWeight.SemiBold)
             }
             Box{
-                DeskSurfaceIconButton("circle-user-round","工作台菜单",size=48.dp,iconSize=26.dp){navigate("settings")}
+                DrawerCircleButton("circle-user-round","工作台菜单",size=48.dp,iconSize=26.dp){navigate("settings")}
                 Box(Modifier.align(Alignment.TopEnd).padding(3.dp)){AppUpdateBadge()}
             }
         }
+    }
+}
+/** The familiar sidebar keeps circular floating controls without changing other pages. */
+@Composable private fun DrawerCircleButton(name:String,label:String,size:Dp=44.dp,iconSize:Dp=24.dp,onClick:()->Unit){
+    val c=LocalDeskColors.current
+    val interaction=remember{MutableInteractionSource()};val pressed by interaction.pressedState()
+    val highlight=animatedHighlight(pressed,false,c.accent)
+    Box(Modifier.size(size).pressScale(pressed,true,DeskMotion.IconPressScale)
+        .deskFloatingSurface(CircleShape,18.dp).background(highlight,CircleShape)
+        .clickable(interactionSource=interaction,indication=null,onClick=onClick)
+        .semantics{contentDescription=label;role=Role.Button},contentAlignment=Alignment.Center){
+        DeskIcon(name,size=iconSize)
     }
 }
 @Composable private fun DrawerItem(label:String,icon:String?=null,selected:Boolean=false,badge:Int=0,onClick:()->Unit){
@@ -201,7 +213,7 @@ private val baselineFadeEasing=Easing{if(it<.5f)2*it*it else 1-(-2*it+2)*(-2*it+
     }
 }
 @Composable fun DeskDivider(){Box(Modifier.padding(horizontal=16.dp,vertical=12.dp).fillMaxWidth().height(1.dp).background(LocalDeskColors.current.border))}
-@Composable fun DeskField(value:String,onChange:(String)->Unit,placeholder:String,modifier:Modifier=Modifier,enabled:Boolean=true,size:Int=16,multiline:Boolean=false,maxLength:Int=16000,autoFocus:Boolean=false){val c=LocalDeskColors.current;val focus=remember{FocusRequester()};LaunchedEffect(autoFocus){if(autoFocus)focus.requestFocus()};BasicTextField(value,{if(it.length<=maxLength)onChange(it)},modifier.focusRequester(focus).semantics{contentDescription=placeholder},enabled=enabled,singleLine=!multiline,textStyle=TextStyle(color=c.foreground,fontSize=size.sp,lineHeight=24.sp,platformStyle=PlatformTextStyle(includeFontPadding=true)),cursorBrush=SolidColor(Color(0xff008577)),decorationBox={inner->Box{if(value.isEmpty())DeskText(placeholder,size=size,color=c.mutedForeground,lineHeight=24);inner()}})}
+@Composable fun DeskField(value:String,onChange:(String)->Unit,placeholder:String,modifier:Modifier=Modifier,enabled:Boolean=true,size:Int=16,multiline:Boolean=false,maxLength:Int=16000,autoFocus:Boolean=false){val c=LocalDeskColors.current;val focus=remember{FocusRequester()};LaunchedEffect(autoFocus){if(autoFocus)focus.requestFocus()};BasicTextField(value,{if(it.length<=maxLength)onChange(it)},modifier.focusRequester(focus).semantics{contentDescription=placeholder},enabled=enabled,singleLine=!multiline,textStyle=TextStyle(color=c.foreground,fontSize=size.sp,lineHeight=24.sp,platformStyle=PlatformTextStyle(includeFontPadding=true)),cursorBrush=SolidColor(c.primary),decorationBox={inner->Box{if(value.isEmpty())DeskText(placeholder,size=size,color=c.mutedForeground,lineHeight=24);inner()}})}
 
 /** Text link used in toolbars and status strips: animated highlight, no default Material indication. */
 @Composable private fun DeskLink(label:String,modifier:Modifier=Modifier,icon:String?=null,weight:FontWeight=FontWeight.Normal,color:Color=LocalDeskColors.current.mutedForeground,onClick:()->Unit){
@@ -291,12 +303,17 @@ private val baselineFadeEasing=Easing{if(it<.5f)2*it*it else 1-(-2*it+2)*(-2*it+
     val modelLocked=readOnly||active!=null||busy
     val modelLockReason=when{readOnly->"${reason.ifEmpty{"会话为只读"}}，暂时无法更改模型。";active!=null->"正在生成回复，结束后可更改模型和思考强度。";busy->"正在发送，请稍候。";else->""}
     Column(Modifier.fillMaxSize().background(c.background).statusBarsPadding().navigationBarsPadding().imePadding()) {
-        Row(Modifier.fillMaxWidth().height(64.dp).padding(horizontal=14.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)){
-            DeskSurfaceIconButton("menu","打开导航",onClick=openDrawer)
-            Box(Modifier.weight(1f),contentAlignment=Alignment.CenterStart){
-                if(!guest)ModelPickerEntry(modelLabel,effortNames[effort]?:"默认",sheet=="model",{openSheet("model")},Modifier.widthIn(max=180.dp))
+        Row(Modifier.fillMaxWidth().heightIn(min=72.dp).padding(horizontal=12.dp,vertical=4.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(4.dp)){
+            DeskIconButton("panel-left","打开导航",iconSize=24.dp,onClick=openDrawer)
+            Column(Modifier.weight(1f)){
+                Row(Modifier.padding(start=10.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(6.dp)){
+                    DeskIcon(if(clientSession)"monitor"else "message-circle",size=14.dp,tint=c.primary)
+                    DeskText(if(clientSession)session.device?.name?:"电脑会话"else "CCtunnel · 手机会话",size=12,color=c.mutedForeground,maxLines=1)
+                }
+                if(!guest)ModelPickerEntry(modelLabel,effortNames[effort]?:"默认",sheet=="model",{openSheet("model")},Modifier.fillMaxWidth())
+                else DeskText("CCtunnel",Modifier.padding(start=10.dp),size=18,weight=FontWeight.SemiBold)
             }
-            Row(Modifier.deskFloatingSurface(CircleShape).clip(CircleShape),verticalAlignment=Alignment.CenterVertically){
+            Row(verticalAlignment=Alignment.CenterVertically){
                 DeskIconButton("square-pen","新建会话",enabled=!busy&&!creatingSession,iconSize=24.dp,onClick=newChat)
                 DeskIconButton("ellipsis-vertical","会话菜单",iconSize=24.dp,selected=menu=="chat"){keyboard?.hide();menu="chat"}
             }
@@ -317,9 +334,16 @@ private val baselineFadeEasing=Easing{if(it<.5f)2*it*it else 1-(-2*it+2)*(-2*it+
             LazyColumn(Modifier.fillMaxSize(),state=list,contentPadding=PaddingValues(horizontal=16.dp,vertical=12.dp)){
                 if(history?.hasEarlier==true&&online)item(key="earlier"){DeskAction(if(history.loading)"正在加载…"else "加载更早的记录",!history.loading,loading=history.loading){scope.launch{try{repo.loadEarlier(session.id)}catch(e:Exception){error=e.message.orEmpty()}}}}
                 // Stable row ids: a streamed chunk updates one row in place; only newly inserted rows fade in.
-                itemsIndexed(rows,key={_,r->r.id},contentType={_,r->r.kind}){i,row->ChatTranscriptRow(row,active?.id==row.runId,readOnly||busy,focus==i,modifier=Modifier.animateItem(fadeInSpec=tween(200,easing=baselineFadeEasing),placementSpec=null,fadeOutSpec=tween(150,easing=baselineFadeEasing)),onHeightChange={rowLayoutVersion++},showActions=row.kind=="reply"&&active?.id!=row.runId&&rows.drop(i+1).none{it.runId==row.runId&&it.kind=="reply"},actionText=rows.filter{it.runId==row.runId&&it.kind=="reply"}.joinToString("\n\n"){it.content},send=command)}
+                itemsIndexed(rows,key={_,r->r.id},contentType={_,r->r.kind}){i,row->ChatTranscriptRow(row,active?.id==row.runId,readOnly||busy,focus==i,modifier=Modifier.animateItem(fadeInSpec=DeskMotion.fadeIn(),placementSpec=null,fadeOutSpec=DeskMotion.fadeOut()),onHeightChange={rowLayoutVersion++},showActions=row.kind=="reply"&&active?.id!=row.runId&&rows.drop(i+1).none{it.runId==row.runId&&it.kind=="reply"},actionText=rows.filter{it.runId==row.runId&&it.kind=="reply"}.joinToString("\n\n"){it.content},send=command)}
             }
-            androidx.compose.animation.AnimatedVisibility(rows.isEmpty()&&(history?.loading==true||readOnly&&!guest),Modifier.align(Alignment.BottomStart).fillMaxWidth(),enter=fadeIn(tween(220,easing=baselineFadeEasing)),exit=ExitTransition.None){
+            if(rows.isEmpty()&&session.id.isEmpty()&&history?.loading!=true){
+                Column(Modifier.align(Alignment.Center).padding(horizontal=32.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
+                    Box(Modifier.size(48.dp).background(c.accent,DeskShape.Field),contentAlignment=Alignment.Center){DeskIcon("link-2",size=28.dp,tint=c.primary)}
+                    DeskText("从这里开始",size=26,weight=FontWeight.SemiBold)
+                    DeskText("在手机上对话，也能从侧栏打开电脑会话。",size=15,color=c.mutedForeground,lineHeight=24)
+                }
+            }
+            androidx.compose.animation.AnimatedVisibility(rows.isEmpty()&&(history?.loading==true||readOnly&&!guest),Modifier.align(Alignment.BottomStart).fillMaxWidth(),enter=fadeIn(DeskMotion.fadeIn()),exit=ExitTransition.None){
                 DeskText(if(history?.loading==true)"正在读取会话…"else "暂无已加载的消息",Modifier.padding(horizontal=24.dp,vertical=20.dp),size=16,color=c.mutedForeground)
             }
             JumpToLatestButton(!nearEnd,Modifier.align(Alignment.BottomEnd).padding(end=16.dp,bottom=8.dp)){
@@ -345,7 +369,7 @@ private val baselineFadeEasing=Easing{if(it<.5f)2*it*it else 1-(-2*it+2)*(-2*it+
             }
         }
     }
-    DeskAnchoredOverlay(menu=="chat",{menu=""},width=205.dp,corner=24.dp){
+    DeskAnchoredOverlay(menu=="chat",{menu=""},width=224.dp,corner=20.dp){
         ChatMenuItem("在聊天中查找","search"){menu="";search=true}
         ChatMenuItem("刷新会话","refresh-cw",enabled=!guest&&!readOnly&&!busy&&!creatingSession&&session.id.isNotBlank()){
             menu="";scope.launch{send("session.status",json("quota" to true))}

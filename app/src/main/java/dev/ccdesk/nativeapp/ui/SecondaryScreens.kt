@@ -37,7 +37,6 @@ import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.Easing
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.fadeIn
 import androidx.compose.foundation.BorderStroke
@@ -111,8 +110,6 @@ import kotlin.math.floor
 
 private val statusLabels = mapOf("loading" to "正在读取连接信息", "setup" to "等待连接", "connecting" to "正在连接", "online" to "已连接", "offline" to "连接已断开")
 private val settingTabs = listOf("settings" to "概览", "connection" to "连接", "usage" to "账号与用量", "access" to "访问管理", "notifications" to "通知", "help" to "帮助")
-// Reanimated withTiming's default is Easing.inOut(Easing.quad).
-private val secondaryTiming = Easing { if (it < .5f) 2 * it * it else 1 - (-2 * it + 2) * (-2 * it + 2) / 2 }
 private fun fields(vararg values: Pair<String, Any?>) = JSONObject().apply { values.forEach { (k, v) -> if (v != null) put(k, v) } }
 private fun JSONObject?.text(key: String, fallback: String = ""): String = if (this == null || isNull(key)) fallback else optString(key, fallback)
 private fun JSONObject?.objects(key: String): List<JSONObject> = this?.optJSONArray(key)?.let { a -> (0 until a.length()).mapNotNull { a.optJSONObject(it) } }.orEmpty()
@@ -145,7 +142,7 @@ private class ScreenAction(private val scope: CoroutineScope) {
 
 /** Full-page settings retain the native controls and existing workbench capabilities. */
 @Composable
-fun SecondaryScreen(route: String, repository: WorkbenchRepository, onNavigate: (String) -> Unit, onClose: () -> Unit, onOpenChat: () -> Unit = onClose, visible: Boolean = true, backEnabled: Boolean = true) {
+fun SecondaryScreen(route: String, repository: WorkbenchRepository, onNavigate: (String) -> Unit, onClose: () -> Unit, onOpenChat: () -> Unit = onClose, visible: Boolean = true, backEnabled: Boolean = true, onPresentChange: (Boolean) -> Unit = {}) {
     val state by repository.state.collectAsState()
     val document = licenseDocumentFor(route)
     val licenses = route == "licenses" || document != null
@@ -167,6 +164,7 @@ fun SecondaryScreen(route: String, repository: WorkbenchRepository, onNavigate: 
         selectedTab = if (licenses) "help" else route,
         onBack = back,
         backEnabled = backEnabled,
+        onPresentChange = onPresentChange,
         backLabel = parent?.let { "返回${titleFor(it)}" } ?: "返回") { page ->
         key(page, if (page == "access") state.endpoint else "") {
             val pageDocument = licenseDocumentFor(page)
@@ -192,19 +190,20 @@ private fun tabIndex(route: String) = when {
     else -> settingTabs.indexOfFirst { it.first == route }
 }
 
-/** Settings use the same full-height, rounded-group layout as the reference phone UI. */
+/** Full-height pages share CCtunnel's quiet header and outlined section cards. */
 @Composable
 internal fun SettingsPanel(route: String, title: String, onNavigate: (String) -> Unit, onClose: () -> Unit, visible: Boolean = true,
-    selectedTab: String = route, onBack: (() -> Unit)? = null, backLabel: String = "返回", backEnabled: Boolean = true, content: @Composable ColumnScope.(String) -> Unit) {
+    selectedTab: String = route, onBack: (() -> Unit)? = null, backLabel: String = "返回", backEnabled: Boolean = true, onPresentChange: (Boolean) -> Unit = {}, content: @Composable ColumnScope.(String) -> Unit) {
     val c = LocalDeskColors.current
     val motion = rememberModalMotion(visible)
+    SideEffect { onPresentChange(visible || motion.present) }
     if (!visible && !motion.present) return
     val close by rememberUpdatedState(onClose)
     var search by remember { mutableStateOf("") }
     BackHandler(enabled = visible && backEnabled, onBack = onBack ?: onClose)
     Box(Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxSize().testTag(OverlayScrimTag).graphicsLayer { alpha = motion.scrim.value }.background(Color.Black.copy(alpha = DeskMotion.PanelScrim))
-            .then(if (visible) Modifier.pointerInput(Unit) { detectTapGestures { close() } }.semantics { contentDescription = "关闭设置"; role = Role.Button; onClick { close(); true } } else Modifier))
+            .then(if (visible) Modifier.pointerInput(Unit) { detectTapGestures { close() } }.semantics { contentDescription = "关闭设置"; role = Role.Button; onClick { close(); true } } else BlockPointerInput.clearAndSetSemantics { }))
         BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             val wide = maxWidth >= 736.dp
             val pageWidth = with(LocalDensity.current) { maxWidth.toPx() }
@@ -213,12 +212,15 @@ internal fun SettingsPanel(route: String, title: String, onNavigate: (String) ->
                 .graphicsLayer { val f = motion.panel.value; alpha = (1f - f).coerceIn(0f, 1f); translationX = pageWidth * .14f * f }.testTag(OverlayPanelTag)
                 .background(c.background).then(if (visible) AbsorbPointerInput else BlockPointerInput.clearAndSetSemantics { }).safeDrawingPadding().imePadding()) {
                 Column(Modifier.fillMaxSize()) {
-                    Row(Modifier.fillMaxWidth().height(68.dp).padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.fillMaxWidth().heightIn(min = 68.dp).padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                         DeskIconButton("arrow-left", if (onBack != null) backLabel else "返回", iconSize = 24.dp, onClick = onBack ?: onClose)
                         AnimatedContent(title, Modifier.weight(1f), transitionSpec = { fadeIn(DeskMotion.fadeIn()) togetherWith fadeOut(DeskMotion.fadeOut()) }, label = "settings title") {
-                            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { DeskText(it, Modifier.semantics { heading() }, size = 16, weight = FontWeight.SemiBold, maxLines = 1) }
+                            Column(Modifier.fillMaxWidth().padding(start = 8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                DeskText("CCtunnel", size = 11, color = c.primary, weight = FontWeight.SemiBold)
+                                DeskText(it, Modifier.semantics { heading() }, size = 18, weight = FontWeight.SemiBold, maxLines = 1)
+                            }
                         }
-                        Box(Modifier.background(c.card, CircleShape)) {
+                        Box(Modifier.background(c.card, RoundedCornerShape(14.dp))) {
                             if (route == "settings") DeskIconButton("info", "关于与帮助", iconSize = 24.dp) { onNavigate("help") }
                             else DeskIconButton("x", "关闭", iconSize = 22.dp, onClick = onClose)
                         }
@@ -234,10 +236,10 @@ internal fun SettingsPanel(route: String, title: String, onNavigate: (String) ->
                     }
                 }
                 if (route == "settings") Row(Modifier.align(Alignment.BottomCenter).padding(start = 12.dp, end = 12.dp, bottom = 10.dp).fillMaxWidth().height(48.dp)
-                    .clip(CircleShape).background(c.card).padding(start = 16.dp, end = 6.dp), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    .clip(RoundedCornerShape(16.dp)).background(c.card).border(1.dp, c.border, RoundedCornerShape(16.dp)).padding(start = 16.dp, end = 6.dp), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
                     DeskIcon("search", size = 22.dp, tint = c.mutedForeground)
                     BasicTextField(search, { search = it }, Modifier.weight(1f).semantics { contentDescription = "搜索设置" }, singleLine = true,
-                        textStyle = TextStyle(fontFamily = FontFamily.SansSerif, color = c.foreground, fontSize = 16.sp), cursorBrush = SolidColor(c.foreground),
+                        textStyle = TextStyle(fontFamily = FontFamily.SansSerif, color = c.foreground, fontSize = 16.sp), cursorBrush = SolidColor(c.primary),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search), decorationBox = { inner -> Box { if (search.isEmpty()) DeskText("搜索设置", size = 16, color = c.mutedForeground); inner() } })
                     if (search.isNotEmpty()) DeskIconButton("x", "清除设置搜索", iconSize = 17.dp) { search = "" }
                 }
@@ -343,8 +345,11 @@ private class SettingsLineHeight(private val height: Int) : LineHeightSpan {
 @Composable private fun SSection(title: String? = null, content: @Composable ColumnScope.() -> Unit) {
     val c = LocalDeskColors.current
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        if (title != null) SNativeText(title, Modifier.padding(start = 16.dp).semantics { heading() }, size = 13, lineHeight = 20, color = c.mutedForeground, weight = FontWeight.Medium, heading = true)
-        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).border(1.dp, c.border, RoundedCornerShape(28.dp)).padding(horizontal = 16.dp)) { content() }
+        if (title != null) Row(Modifier.padding(start = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(3.dp, 14.dp).background(c.primary, RoundedCornerShape(2.dp)))
+            SNativeText(title, Modifier.semantics { heading() }, size = 13, lineHeight = 20, color = c.primary, weight = FontWeight.SemiBold, heading = true)
+        }
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(c.card).border(1.dp, c.border, RoundedCornerShape(20.dp)).padding(horizontal = 16.dp)) { content() }
     }
 }
 
@@ -355,7 +360,9 @@ private class SettingsLineHeight(private val height: Int) : LineHeightSpan {
     val pressed by interaction.pressedState()
     val highlight = animatedHighlight(pressed && onClick != null, false, c.muted)
     Row(Modifier.fillMaxWidth().heightIn(min = 54.dp).background(highlight).then(if (onClick != null) Modifier.clickable(interactionSource = interaction, indication = null, onClick = onClick).semantics { role = Role.Button; if (accessibilityLabel != null) contentDescription = accessibilityLabel } else Modifier).padding(vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-        if (icon != null) DeskIcon(icon, size = 24.dp, tint = if (danger) red else c.foreground, strokeWidth = 1.85f)
+        if (icon != null) Box(Modifier.size(32.dp).background(if (danger) red.copy(alpha = .08f) else c.secondary, RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) {
+            DeskIcon(icon, size = 20.dp, tint = if (danger) red else c.primary, strokeWidth = 1.85f)
+        }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             SNativeText(label, size = 16, lineHeight = 23, color = if (danger) red else c.foreground)
             if (!detail.isNullOrEmpty()) {
@@ -380,11 +387,11 @@ private class SettingsLineHeight(private val height: Int) : LineHeightSpan {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.pressedState()
     val alpha by androidx.compose.animation.core.animateFloatAsState(if (disabled) .5f else if (pressed) .8f else 1f, if (pressed) tween(DeskMotion.PressHighlightIn) else DeskMotion.state(), label = "action alpha")
-    Row(Modifier.fillMaxWidth().heightIn(min = 44.dp).pressScale(pressed, !disabled).graphicsLayer { this.alpha = alpha; compositingStrategy = CompositingStrategy.ModulateAlpha }.clip(CircleShape).background(if (secondary) c.background else c.foreground)
-        .then(if (secondary) Modifier.border(1.dp, c.border, CircleShape) else Modifier).clickable(enabled = !disabled, interactionSource = interaction, indication = null, onClick = onClick).semantics { role = Role.Button }.padding(horizontal = 16.dp, vertical = 10.dp),
+    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).pressScale(pressed, !disabled).graphicsLayer { this.alpha = alpha; compositingStrategy = CompositingStrategy.ModulateAlpha }.clip(RoundedCornerShape(14.dp)).background(if (secondary) c.card else c.primary)
+        .then(if (secondary) Modifier.border(1.dp, c.border, RoundedCornerShape(14.dp)) else Modifier).clickable(enabled = !disabled, interactionSource = interaction, indication = null, onClick = onClick).semantics { role = Role.Button }.padding(horizontal = 16.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
         AnimatedVisibility(busy, enter = fadeIn(DeskMotion.fadeIn()) + androidx.compose.animation.expandHorizontally(DeskMotion.layoutSize), exit = fadeOut(DeskMotion.fadeOut()) + androidx.compose.animation.shrinkHorizontally(DeskMotion.layoutSize)) { Box(Modifier.padding(end = 8.dp)) { SBusy() } }
-        NativeSpanText(label, size = 16, lineHeight = null, weight = 500, color = if (secondary) c.foreground else c.background, selectable = false)
+        NativeSpanText(label, size = 16, lineHeight = null, weight = 500, color = if (secondary) c.foreground else c.onPrimary, selectable = false)
     }
 }
 
@@ -437,7 +444,7 @@ private class SettingsLineHeight(private val height: Int) : LineHeightSpan {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         SNativeText(label, size = 14, weight = FontWeight.Medium)
         BasicTextField(value, updateValue, enabled = enabled,
-            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(18.dp)).border(1.dp, if (focused) c.mutedForeground else c.border, RoundedCornerShape(18.dp)).background(c.background).onGloballyPositioned { autofillNode?.boundingBox = it.boundsInWindow() }.padding(1.dp).padding(horizontal = 14.dp, vertical = 12.dp).onFocusChanged {
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(14.dp)).border(1.dp, if (focused) c.primary else c.border, RoundedCornerShape(14.dp)).background(c.background).onGloballyPositioned { autofillNode?.boundingBox = it.boundsInWindow() }.padding(1.dp).padding(horizontal = 14.dp, vertical = 12.dp).onFocusChanged {
                 focused = it.isFocused
                 autofillNode?.let { node -> if (it.isFocused && enabled) autofill?.requestAutofillForNode(node) else autofill?.cancelAutofillForNode(node) }
             }.semantics { contentDescription = label },
@@ -458,11 +465,11 @@ private class SettingsLineHeight(private val height: Int) : LineHeightSpan {
     var confirm by remember { mutableStateOf(false) }
     val action = rememberAction()
     LaunchedEffect(state.status) { if (state.status == "online") runCatching { repo.command("account.status") } }
-    SSection {
+    SSection("工作台") {
     val identityInteraction = remember { MutableInteractionSource() }
     val identityPressed by identityInteraction.pressedState()
     Row(Modifier.fillMaxWidth().heightIn(min = 54.dp).background(animatedHighlight(identityPressed, false, c.muted)).clickable(interactionSource = identityInteraction, indication = null) { onNavigate(if (state.authenticated) "usage" else "connection") }.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        Box(Modifier.size(28.dp).clip(CircleShape).background(c.muted), contentAlignment = Alignment.Center) { DeskIcon("circle-user", size = 24.dp, tint = c.foreground, strokeWidth = 1.7f) }
+        Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(c.accent), contentAlignment = Alignment.Center) { DeskIcon("circle-user", size = 24.dp, tint = c.primary, strokeWidth = 1.7f) }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             SNativeText(state.account.text("email").ifBlank { if (state.authenticated) "工作台账号" else "账户" }, size = 16, lineHeight = 23, weight = FontWeight.Normal, maxLines = 1)
             if (state.endpoint.isNotEmpty()) SNativeText(runCatching { URI(state.endpoint).authority }.getOrDefault(state.endpoint), size = 13, lineHeight = 18, color = c.mutedForeground, maxLines = 1)
@@ -472,12 +479,12 @@ private class SettingsLineHeight(private val height: Int) : LineHeightSpan {
     SDivider()
     SRow("远程控制", "电脑客户端与会话", "remote", last = true, onClick = { onNavigate("remote") })
     }
-    SSection {
-        SRow("连接设置", icon = "link-2", last = true, accessibilityLabel = "打开连接设置", onClick = { onNavigate("connection") })
-    }
-    SSection {
+    SSection("连接与管理") {
+        SRow("连接设置", icon = "link-2", accessibilityLabel = "打开连接设置", onClick = { onNavigate("connection") })
         SRow("账号与用量", icon = "chart-column", onClick = { onNavigate("usage") })
-        SRow("访问管理", icon = "shield-check", onClick = { onNavigate("access") })
+        SRow("访问管理", icon = "shield-check", last = true, onClick = { onNavigate("access") })
+    }
+    SSection("通知与支持") {
         val unread = state.notices.count { !it.read }
         SRow("通知中心", if (unread > 0) "$unread 条未读" else null, "bell", onClick = { onNavigate("notifications") })
         SRow("使用帮助", icon = "circle-help", last = state.version.isNullOrBlank(), onClick = { onNavigate("help") })
@@ -609,9 +616,9 @@ private fun normalizedPin(raw: String): String {
     val haptics = rememberHaptics()
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.pressedState()
-    val background by animateColorAsState(if (selected) c.foreground else if (pressed) c.accent else c.muted, DeskMotion.highlight(pressed), label = "option background")
-    val text by animateColorAsState(if (selected) c.background else c.foreground, DeskMotion.state(), label = "option text")
-    Box(Modifier.pressScale(pressed, true, DeskMotion.ChipPressScale).clip(CircleShape).background(background).clickable(interactionSource = interaction, indication = null) { if (!selected) haptics.selection(); onClick() }.semantics { this.selected = selected; role = Role.Button }.padding(horizontal = 14.dp, vertical = 10.dp)) {
+    val background by animateColorAsState(if (selected || pressed) c.accent else c.muted, DeskMotion.highlight(pressed), label = "option background")
+    val text by animateColorAsState(if (selected) c.primary else c.foreground, DeskMotion.state(), label = "option text")
+    Box(Modifier.heightIn(min = 48.dp).pressScale(pressed, true, DeskMotion.ChipPressScale).clip(RoundedCornerShape(12.dp)).background(background).border(1.dp, if (selected) c.primary.copy(alpha = .4f) else Color.Transparent, RoundedCornerShape(12.dp)).clickable(interactionSource = interaction, indication = null) { if (!selected) haptics.selection(); onClick() }.semantics { this.selected = selected; role = Role.Button }.padding(horizontal = 14.dp, vertical = 12.dp), contentAlignment = Alignment.Center) {
         DeskText(label, size = 14, color = text, weight = if (selected) FontWeight.Medium else FontWeight.Normal)
     }
 }
@@ -681,8 +688,10 @@ private fun normalizedPin(raw: String): String {
             SHint(error, true)
             if (busy && page == null) SHint("正在读取请求记录…")
             page?.optJSONObject("totals")?.let { totals ->
-                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(c.muted).padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    SNativeText("${number(totals.optLong("requests"))} 次请求 · ${money(totals.optDouble("costUsd", 0.0))}", size = 14, lineHeight = 20, weight = FontWeight.Medium)
+                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(c.secondary).padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    SNativeText("估算费用", size = 12, lineHeight = 18, color = c.mutedForeground)
+                    SNativeText(money(totals.optDouble("costUsd", 0.0)), size = 26, lineHeight = 34, weight = FontWeight.SemiBold, color = c.primary)
+                    SNativeText("${number(totals.optLong("requests"))} 次请求", size = 14, lineHeight = 20, weight = FontWeight.Medium)
                     SHint("输入 ${number(totals.optLong("inputTokens"))} · 输出 ${number(totals.optLong("outputTokens"))} Token")
                     SHint("缓存读取 ${number(totals.optLong("cacheReadTokens"))} · 写入 ${number(totals.optLong("cacheCreationTokens"))} Token")
                 }
@@ -722,7 +731,7 @@ private fun normalizedPin(raw: String): String {
     SHint(action.error, true)
     SSection {
         if (state.notices.isEmpty()) Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 48.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Box(Modifier.clip(CircleShape).background(c.muted).padding(16.dp)) { DeskIcon("bell", size = 24.dp, tint = c.mutedForeground) }
+            Box(Modifier.clip(RoundedCornerShape(16.dp)).background(c.accent).padding(16.dp)) { DeskIcon("bell", size = 24.dp, tint = c.primary) }
             SNativeText("暂无通知", size = 17, weight = FontWeight.Medium)
             SHint("会话需要审批、回答问题或结束运行时，可在这里查看。")
         } else state.notices.forEachIndexed { index, n ->
@@ -733,7 +742,7 @@ private fun normalizedPin(raw: String): String {
                     Row(Modifier.fillMaxWidth().heightIn(min = 54.dp).animateContentSize(DeskMotion.layoutSize).background(animatedHighlight(pressed, false, c.muted)).clickable(enabled = !action.busy, interactionSource = interaction, indication = null) {
                         action.run { if (n.sessionId.isNotEmpty()) repo.selectSession(n.sessionId); repo.readNotice(n.id); if (n.sessionId.isNotEmpty()) onClose() }
                     }.semantics { contentDescription = "${if (n.read) "已读" else "未读"}，${n.title}，${n.body}"; role = Role.Button }.padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        val dot by animateColorAsState(if (n.read) c.muted else c.foreground, DeskMotion.state(), label = "unread dot")
+                        val dot by animateColorAsState(if (n.read) c.muted else c.primary, DeskMotion.state(), label = "unread dot")
                         Box(Modifier.size(8.dp).clip(CircleShape).background(dot))
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             SNativeText(n.title, size = 14, lineHeight = 20, weight = FontWeight.Medium)
@@ -829,11 +838,11 @@ private val licenseDocuments = listOf(
     else SNativeText(text.orEmpty(), size = 13, lineHeight = 20, selectable = true)
 }
 
-/** Baseline entries fade in; removal has no exit fade. Layout changes animate separately. */
+/** Entries use the shared fade; removal has no exit fade to avoid delaying updates. */
 @Composable internal fun SecondaryFadeContent(visible: Boolean, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     val visibility = remember { MutableTransitionState(false) }
     visibility.targetState = visible
-    AnimatedVisibility(visibility, modifier, enter = fadeIn(tween(160, easing = secondaryTiming)), exit = ExitTransition.None) { content() }
+    AnimatedVisibility(visibility, modifier, enter = fadeIn(DeskMotion.fadeIn()), exit = ExitTransition.None) { content() }
 }
 
 

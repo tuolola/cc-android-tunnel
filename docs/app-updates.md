@@ -1,13 +1,15 @@
 # App 更新与版本发布
 
+**1.0.5-native 协议兼容性：** 本版使用协议 **26**，需要上游 **cc-desk-tunnel v0.3.15**，上游电脑客户端与服务端也需配套。旧公开 `v1.0.4-native` 使用协议 **25**，对应上游 v0.3.14；单独安装新 Android APK 不会升级服务端。分块历史、取消、超时和验证范围见[协议 26 适配记录](protocol-26.md)。
+
 **1.0.4-native 连接兼容性：** 本版移除 HTTPS 网页登录，仅支持完整的 `wss://主机[:端口]/ws` 服务地址与服务凭据。旧 HTTPS 地址和对应登录状态不会自动迁移；升级后请使用管理员提供的 WSS 地址和凭据。已有 WSS 加密凭据保持兼容，新传输不读取或发送旧网页登录 Cookie。
 
 App 更新从 **`1.0.2-native`（versionCode 8）**开始提供。旧版 `v1.0.1-native` APK 没有更新检查功能，需要先手动安装本版；仅更新 GitHub 仓库不会给旧 APK 增加功能。
 
-当前版本 **`1.0.4-native`（versionCode 10）**为 Android 7.0 及以上的 **Debug 签名公开测试版**：[下载 CCtunnel.apk](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.4-native/CCtunnel.apk) · [发布说明](https://github.com/tuolola/cc-android-tunnel/releases/tag/v1.0.4-native) · [SHA256SUMS.txt](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.4-native/SHA256SUMS.txt)。APK 大小为 **13,612,525 字节**，SHA-256：
+当前版本 **`1.0.5-native`（versionCode 11）**为 Android 7.0 及以上的 **Debug 签名公开测试版**：[下载 CCtunnel.apk](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.5-native/CCtunnel.apk) · [发布说明](https://github.com/tuolola/cc-android-tunnel/releases/tag/v1.0.5-native) · [SHA256SUMS.txt](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.5-native/SHA256SUMS.txt)。APK 大小为 **14,522,782 字节**，SHA-256：
 
 ```text
-88a7da5ecb501859c90d8c060e4209866348a1b3742c88191a1232fb17481051
+13646f48395fe0b7303ce087bdcbcce47a3b80567c5da21f40745e8cc96e2bf2
 ```
 
 ## 在 App 中使用
@@ -26,7 +28,7 @@ App 更新从 **`1.0.2-native`（versionCode 8）**开始提供。旧版 `v1.0.1
 Get-FileHash .\CCtunnel.apk -Algorithm SHA256
 ```
 
-覆盖安装需要相同包名、相同签名以及更高的 Android `versionCode`。本版 `1.0.4-native`（versionCode 10）沿用已发布版本的 Debug 签名证书，证书 SHA-256 为 `eaac7685189a81114415665d17e1ce4e3e4fa1154ae1c03470ff430a192f025b`；此前 `1.0.3-native`、`1.0.2-native` 和 `v1.0.1-native` 已核对使用相同签名，不需要先卸载旧版。后续 APK 也必须保持相同签名才能覆盖现有安装，单独更改版本名称不能解决签名不一致。
+覆盖安装需要相同包名、相同签名以及更高的 Android `versionCode`。本版 `1.0.5-native`（versionCode 11）沿用已发布版本的 Debug 签名证书，证书 SHA-256 为 `eaac7685189a81114415665d17e1ce4e3e4fa1154ae1c03470ff430a192f025b`；此前 `1.0.4-native`、`1.0.3-native`、`1.0.2-native` 和 `v1.0.1-native` 已核对使用相同签名，不需要先卸载旧版。后续 APK 也必须保持相同签名才能覆盖现有安装，单独更改版本名称不能解决签名不一致。
 
 ## 检查来源与版本规则
 
@@ -49,7 +51,19 @@ App 版本按 SemVer 比较，不按发布时间或字符串字典序判断：�
 
 ## 验收与复现
 
+### 1.0.5-native 协议 26 与暖色主题 — 2026-11-16
+
+本版将浅色/深色界面统一为暖白、炭灰和陶土色，保留原有输入框与侧栏形态。协议适配增加历史分块组装、每块确认、切换时取消、实时消息顺序缓冲和失败后从完整快照重读，继续保留直接快照路径及现有业务权限边界。
+
+本轮最终 APK 构建通过 **92 项 JVM 测试（0 失败）**、Android Lint（**0 个错误、40 条警告**）、生产源码/APK 原生边界审计及 **8 项 APK 审计回归**，沿用上述签名证书。真机 **7 项 TLS 测试全部通过**：5 项 NativeTlsIntegrationTest 与 2 项协议 26 分块历史测试。最终界面与交互检查：25 项真机交互通过（侧栏 2、流式滚动 3、聊天 7、原生输入框 7、手势 6），覆盖侧栏 30/60/65 条本地追加与搜索、IME/大字输入、模型与审批、滚动、途中反向拖动和退出阻断。浅色与深色各 14 个状态截图测试通过；人工复看两主题聊天与侧栏，确认原胶囊输入框、圆形发送按钮和简单全宽选中行已恢复，未见裁切或旧样式残留。
+
+已核对手机安装的 `1.0.5-native` / versionCode 11，`base.apk` SHA-256 与上述交付 APK 完全一致。深色截图只在测试内切换局部主题，系统仍为浅色；正式系统主题切换及状态栏效果未单独验收。以上覆盖安装核对不等于旧版 App 的更新发现、浏览器下载及系统安装完整链路，后者尚未验收。
+
+真实已配置服务的只读检查返回 **`protocolMismatch`**，属于版本不兼容的拒绝结果：该 VPS 须先同步到上游 v0.3.15 / 协议 26，当前尚未通过真实历史、分页或重连联调。本轮没有升级现有服务。协议 26 的本地 TLS 夹具和真实服务检查分别记录在[协议验证](protocol-26.md#本轮验证)。发布后的匿名附件下载、哈希复核和旧版 App 更新发现需另行记录，不能由发布前测试推断。
+
 ### 1.0.4-native 移动端界面与远程控制 — 2026-11-15
+
+历史公开 [v1.0.4-native](https://github.com/tuolola/cc-android-tunnel/releases/tag/v1.0.4-native) / versionCode 10 使用协议 **25**，对应上游 v0.3.14。其 APK 大小为 **13,612,525 字节**，SHA-256 为 `88a7da5ecb501859c90d8c060e4209866348a1b3742c88191a1232fb17481051`；该值仅用于[旧版校验文件](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.4-native/SHA256SUMS.txt)，不能用于 1.0.5 附件。
 
 本版重做侧栏、聊天顶部栏、设置和弹层：侧栏顶部仅保留远程控制与通知，会话在侧栏内搜索并按每次 30 条加载更多；设置从头像进入。远程控制按电脑分组展示客户端会话及离线历史，排除手机自身。聊天菜单仅保留查找与刷新，权限入口仅在电脑客户端会话显示。新增原生回复复制、文本选择、分享和代码复制，并从服务端预热可用电脑的模型目录，不创建额外聊天。
 

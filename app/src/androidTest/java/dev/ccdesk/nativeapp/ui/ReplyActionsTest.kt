@@ -137,7 +137,7 @@ class ReplyActionsTest {
         }
         compose.onNodeWithContentDescription("更多回复操作").performClick()
         val panel = compose.onNodeWithTag("reply-actions-popup")
-        panel.assertIsDisplayed().assertWidthIsEqualTo(216.dp)
+        panel.assertIsDisplayed().assertWidthIsEqualTo(224.dp)
         val bounds = panel.fetchSemanticsNode().boundsInRoot
         assertTrue("The visible panel tag excludes the shadow padding", bounds.left > 0f && bounds.top > 0f)
 
@@ -175,7 +175,7 @@ class ReplyActionsTest {
         compose.mainClock.autoAdvance = true
         compose.waitForIdle()
         compose.onAllNodes(isPopup()).assertCountEquals(1)
-        compose.onNodeWithTag("reply-actions-popup").assertIsDisplayed().assertWidthIsEqualTo(216.dp)
+        compose.onNodeWithTag("reply-actions-popup").assertIsDisplayed().assertWidthIsEqualTo(224.dp)
 
         compose.onNodeWithText("复制回复").performClick()
         compose.waitForIdle()

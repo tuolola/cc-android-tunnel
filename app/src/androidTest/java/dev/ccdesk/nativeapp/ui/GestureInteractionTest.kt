@@ -2,6 +2,7 @@ package dev.ccdesk.nativeapp.ui
 
 import android.view.MotionEvent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
@@ -109,5 +110,86 @@ class GestureInteractionTest {
             assertEquals("$label must settle",if(target)1f else 0f,samples.last(),.001f)
             assertEquals("$label must retain the 80% phone drawer width",if(target).8f else 0f,screenCoverage(),.001f)
         }
+    }
+
+    @Test fun closingDrawerBlocksRapidTapsUntilTheFinalFrame() {
+        val open=mutableStateOf(true)
+        var backgroundClicks=0
+        var drawerClicks=0
+        compose.setContent{
+            Box(Modifier.fillMaxWidth().height(100.dp).testTag("tap-surface")){
+                DrawerSurface(open.value,{open.value=it},drawerContent={
+                    Box(Modifier.fillMaxSize().background(Color.Red).clickable{drawerClicks++})
+                }){Box(Modifier.fillMaxSize().background(Color.White).clickable{backgroundClicks++})}
+            }
+        }
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance=false
+        // Start the live scrim's pointer coroutine before it switches to blocking
+        // mode; a programmatic close alone cannot catch stale detector reuse.
+        compose.onNodeWithTag("tap-surface").performTouchInput{click(Offset(width*.95f,centerY))}
+        compose.mainClock.advanceTimeByFrame()
+        compose.runOnIdle{assertFalse(open.value)}
+        compose.mainClock.advanceTimeBy(32)
+        val partial=compose.onNodeWithTag("tap-surface").captureToImage().toPixelMap()
+        assertTrue("Test must tap during the visible exit",partial[0,partial.height/2].green<.1f)
+        compose.onNodeWithTag("tap-surface").performTouchInput{click(Offset(width*.95f,centerY))}
+        compose.onNodeWithTag("tap-surface").performTouchInput{click(Offset(2f,centerY))}
+        assertEquals("Closing scrim must block background actions",0,backgroundClicks)
+        assertEquals("Departing drawer rows must also be inert",0,drawerClicks)
+        compose.mainClock.autoAdvance=true
+        compose.waitForIdle()
+        compose.onNodeWithTag("tap-surface").performTouchInput{click(Offset(width*.95f,centerY))}
+        compose.runOnIdle{assertEquals("Input returns when the drawer has left",1,backgroundClicks)}
+    }
+
+    @Test fun closingDrawerCanBeGrabbedAwayFromTheEdgeAndReversed() {
+        val open=mutableStateOf(true)
+        val changes=mutableListOf<Boolean>()
+        var drawerClicks=0
+        compose.setContent{
+            Box(Modifier.fillMaxWidth().height(100.dp).testTag("reverse-surface")){
+                DrawerSurface(open.value,{changes+=it;open.value=it},drawerContent={
+                    Box(Modifier.fillMaxSize().background(Color.Red).clickable{drawerClicks++})
+                }){Box(Modifier.fillMaxSize().background(Color.White))}
+            }
+        }
+        fun edge():Float{
+            val pixels=compose.onNodeWithTag("reverse-surface").captureToImage().toPixelMap()
+            return ((0 until pixels.width).firstOrNull{pixels[it,pixels.height/2].green>.1f}?:pixels.width).toFloat()
+        }
+        compose.waitForIdle()
+        val resting=edge()
+        compose.mainClock.autoAdvance=false
+        compose.runOnIdle{open.value=false}
+        compose.mainClock.advanceTimeByFrame()
+        compose.mainClock.advanceTimeBy(32)
+        val before=edge()
+        assertTrue("Test must grab a partially closed drawer",before>0f&&before<resting)
+        val grab=before*.6f
+        assertTrue("Grab must be outside the normal 32dp opening edge",grab>with(compose.density){32.dp.toPx()})
+        val distance=resting*.25f
+        compose.onNodeWithTag("reverse-surface").performTouchInput{
+            down(Offset(grab,centerY))
+            moveBy(Offset(distance,0f),delayMillis=0)
+        }
+        compose.mainClock.advanceTimeByFrame()
+        val held=edge()
+        assertEquals("Reversal follows from the current position",minOf(resting,before+distance),held,2f)
+        compose.mainClock.advanceTimeBy(64)
+        assertEquals("A held finger owns the drawer while the old spring finishes",held,edge(),1f)
+        compose.onNodeWithTag("reverse-surface").performTouchInput{
+            repeat(4){moveBy(Offset.Zero,delayMillis=40)}
+            up()
+        }
+        compose.mainClock.advanceTimeByFrame()
+        compose.runOnIdle{
+            assertEquals("A normal UP must not be mistaken for ACTION_CANCEL",listOf(true),changes)
+            assertTrue(open.value)
+            assertEquals("Reversing a closing drawer must not activate a row",0,drawerClicks)
+        }
+        compose.mainClock.autoAdvance=true
+        compose.waitForIdle()
+        assertEquals("The reversed drawer settles fully open",resting,edge(),1f)
     }
 }

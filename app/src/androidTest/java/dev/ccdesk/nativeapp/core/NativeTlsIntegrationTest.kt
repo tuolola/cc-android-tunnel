@@ -39,7 +39,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * Real Android networking and Keystore against a local, disposable protocol-25 fixture.
+ * Real Android networking and Keystore against a local, disposable protocol-26 fixture.
  * No application fixture switch, real account, external service, or stored user data is used.
  */
 @RunWith(AndroidJUnit4::class)
@@ -73,7 +73,10 @@ class NativeTlsIntegrationTest {
         val serviceToken = "instrumentation-only-service-token-0123456789"
 
         init {
-            history += event(1,"History loaded.",type = "native.notice")
+            history += event(1,"",type = "native.capabilities").put("payload",json(
+                "type" to "native.capabilities", "models" to JSONArray().put(json(
+                    "value" to "fixture-model", "displayName" to "Fixture model",
+                    "supportedEffortLevels" to JSONArray().put("high")))))
             val certificates = HandshakeCertificates.Builder().heldCertificate(certificate).build()
             server.useHttps(certificates.sslSocketFactory(),false)
             server.dispatcher = object : Dispatcher() {
@@ -103,9 +106,9 @@ class NativeTlsIntegrationTest {
                     frames.update { it + ObservedFrame(connection,frame) }
                     when (frame.optString("type")) {
                         "auth" -> {
-                            val valid = frame.optInt("protocolVersion") == 25 && frame.optString("token") == serviceToken && !frame.optBoolean("tunnel",true)
+                            val valid = frame.optInt("protocolVersion") == 26 && frame.optString("token") == serviceToken && !frame.optBoolean("tunnel",true)
                             if (!valid) { webSocket.close(4001,"Invalid fixture authentication"); return }
-                            val ready = json("type" to "ready","protocolVersion" to 25,"version" to "instrumentation-fixture","sessions" to JSONArray().put(session()))
+                            val ready = json("type" to "ready","protocolVersion" to 26,"version" to "instrumentation-fixture","sessions" to JSONArray().put(session()))
                             webSocket.send(ready.toString())
                             webSocket.send(json("type" to "devices","devices" to JSONArray().put(json("id" to "fixture-server","name" to "Fixture server","server" to true,"ready" to true))).toString())
                         }
@@ -113,6 +116,16 @@ class NativeTlsIntegrationTest {
                             val after = frame.optLong("afterSequence")
                             val events = JSONArray(history.filter { it.getLong("sequence") > after })
                             webSocket.send(json("type" to "session.snapshot","requestId" to frame.getString("requestId"),"session" to session(),"mode" to if (after == 0L) "replace" else "append","hasEarlier" to false,"events" to events).toString())
+                            acknowledge(webSocket,frame)
+                        }
+                        "session.status" -> {
+                            // The production client preloads the model catalog after devices.
+                            // Answer this independent read so message.send never has to wait
+                            // for the catalog's 45-second timeout in a networking fixture.
+                            // Re-emit the same durable capability event supplied by the
+                            // snapshot, so request timing cannot create a synthetic cursor.
+                            val capabilities = history.first()
+                            webSocket.send(json("type" to "session.event","event" to capabilities).toString())
                             acknowledge(webSocket,frame)
                         }
                         "message.send" -> acknowledge(webSocket,frame)
@@ -177,50 +190,83 @@ class NativeTlsIntegrationTest {
         val fixture = TlsWorkbench()
         var transport = AndroidWorkbenchTransport(context)
         var repo = WorkbenchRepository(transport)
+        var stage = "connect pinned WSS"
+        var failure: Throwable? = null
+        fun diagnostic(label: String, cause: Throwable): AssertionError {
+            val state = repo.state.value
+            val history = state.histories["session-one"]
+            val types = fixture.frames.value.map { "${it.connection}:${it.frame.optString("type")}" }
+            return AssertionError("Native TLS stage '$label' failed: status=${state.status}, selected=${state.selectedId}, " +
+                "events=${history?.events?.map { it.sequence }}, fragments=${history?.fragments?.size}, " +
+                "historyLoading=${history?.loading}, catalogsLoading=${state.modelCatalogLoading.size}, " +
+                "upgrades=${fixture.upgrades.get()}, requestTypes=$types", cause)
+        }
         try {
             repo.setFingerprint(fixture.serviceEndpoint,fixture.fingerprint)
             repo.connectService(fixture.serviceEndpoint,fixture.serviceToken)
             awaitState(repo) { it.status == "online" }
+            stage = "initial authentication and device identity"
             val auth = fixture.frame("auth",1)
-            assertEquals(25,auth.getInt("protocolVersion")); assertEquals(fixture.serviceToken,auth.getString("token")); assertFalse(auth.getBoolean("tunnel"))
+            assertEquals(26,auth.getInt("protocolVersion")); assertEquals(fixture.serviceToken,auth.getString("token")); assertFalse(auth.getBoolean("tunnel"))
             assertEquals("CC Android Tunnel",auth.getString("deviceName"))
             val identity = fixture.frame("device",1).getString("id")
             assertTrue(identity.isNotBlank())
             assertNull(fixture.requests.single { it.path == "/ws" }.origin)
             assertNull(fixture.requests.single { it.path == "/ws" }.cookie)
             assertTrue(fixture.requests.none { it.path.contains("/api/") })
+            stage = "initial history and message acknowledgement"
             repo.selectSession("session-one")
             repo.command("message.send",json("sessionId" to "session-one","text" to "Integration stream request."))
 
+            stage = "first stream fragment"
             fixture.fragment("hel")
             awaitState(repo) { it.histories["session-one"]?.fragments?.singleOrNull()?.payload?.optString("text") == "hel" }
+            stage = "second stream fragment"
             fixture.fragment("lo")
             awaitState(repo) { it.histories["session-one"]?.fragments?.singleOrNull()?.payload?.optString("text") == "hello" }
+            stage = "durable event settles fragments"
             fixture.durable(2,"hello")
             awaitState(repo) { it.histories["session-one"]?.let { h -> h.events.lastOrNull()?.sequence == 2L && h.fragments.isEmpty() } == true }
+            stage = "unconfirmed stream before disconnect"
             fixture.fragment("unconfirmed stream fragment")
             awaitState(repo) { it.histories["session-one"]?.fragments?.isNotEmpty() == true }
             fixture.durable(3,"Recovered durable response.",broadcast = false)
+            stage = "observe socket offline"
             fixture.disconnect()
             awaitState(repo) { it.status == "offline" }
             assertTrue(repo.state.value.histories.getValue("session-one").fragments.isEmpty())
+            stage = "reconnect and restore durable cursor"
             awaitState(repo) { it.status == "online" && it.histories["session-one"]?.events?.lastOrNull()?.sequence == 3L }
             assertEquals(2L,fixture.frame("session.subscribe",2).getLong("afterSequence"))
             assertEquals(listOf(1L,2L,3L),repo.state.value.histories.getValue("session-one").events.map { it.sequence })
             assertEquals(1,fixture.frames.value.count { it.frame.optString("type") == "message.send" })
 
+            stage = "dispose first repository and TLS transport"
             dispose(repo,transport)
+            stage = "restart from isolated persisted credentials"
             transport = AndroidWorkbenchTransport(context)
             repo = WorkbenchRepository(transport)
             repo.start()
             awaitState(repo) { it.status == "online" }
+            stage = "restarted device identity"
             assertEquals(identity,fixture.frame("device",3).getString("id"))
             assertEquals(fixture.serviceToken,transport.credential(fixture.serviceEndpoint))
+            stage = "logout removes only isolated credential"
             repo.logout()
             assertEquals("setup",repo.state.value.status); assertEquals("",transport.getEndpoint())
             assertEquals("",transport.credential(fixture.serviceEndpoint))
             assertEquals(fixture.fingerprint,transport.fingerprint(fixture.serviceEndpoint))
-        } finally { dispose(repo,transport); fixture.close(); context.clear() }
+        } catch (error: Throwable) {
+            val report = diagnostic(stage,error)
+            failure = report
+            throw report
+        } finally {
+            try { dispose(repo,transport) }
+            catch (error: Throwable) {
+                val report = diagnostic("final cleanup",error)
+                if (failure != null) failure.addSuppressed(report) else throw report
+            } finally { fixture.close(); context.clear() }
+        }
     }
 
     @Test fun wrongPinRejectsBeforeAuthAndChangingTrustRequiresFreshCredential() = runBlocking {

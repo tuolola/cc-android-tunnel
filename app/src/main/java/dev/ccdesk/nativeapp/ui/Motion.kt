@@ -95,7 +95,7 @@ object DeskMotion {
     const val PanelEnterScale = .965f
     val PanelLift: Dp = 24.dp
     const val PageShiftFraction = .3f
-    val SheetCorner: Dp = 28.dp
+    val SheetCorner: Dp = 24.dp
     /** Sheet background extends this far below its bottom edge to cover spring overshoot. */
     val SheetOverscrollFill: Dp = 120.dp
 
@@ -204,6 +204,7 @@ val LocalReducedMotion = compositionLocalOf { false }
  */
 @Composable fun InteractionSource.pressedState(): State<Boolean> {
     val pressed = remember(this) { mutableStateOf(false) }
+    val reduced = rememberUpdatedState(LocalReducedMotion.current)
     LaunchedEffect(this) {
         val presses = mutableListOf<PressInteraction.Press>()
         var pressedAt = 0L
@@ -214,7 +215,7 @@ val LocalReducedMotion = compositionLocalOf { false }
                 is PressInteraction.Release -> {
                     presses -= interaction.press
                     if (presses.isEmpty()) {
-                        val remaining = DeskMotion.MinimumPressVisibleMs - (SystemClock.uptimeMillis() - pressedAt)
+                        val remaining = if (reduced.value) 0L else DeskMotion.MinimumPressVisibleMs - (SystemClock.uptimeMillis() - pressedAt)
                         release?.cancel()
                         release = launch { if (remaining > 0) delay(remaining); pressed.value = false }
                     }

@@ -39,7 +39,7 @@ import kotlin.math.sqrt
  * rectangle in Compose 1.7.6. A full-window capture is essential: capturing the surface
  * node itself would discard the very exterior shadow pixels under test.
  *
- * These are synthetic fixtures. Only the card fill is blue so its scaled outline can be
+ * These are synthetic fixtures. The card fill and border are blue so their outer outline can be
  * located independently of its gray shadow. Production shape, elevation, animation,
  * compositing, and (for menu/button cases) actual components remain in use.
  */
@@ -68,7 +68,11 @@ class ShadowRenderingTest {
         compose.mainClock.autoAdvance = false
         compose.setContent {
             DeskTheme {
-                val colors = LocalDeskColors.current.copy(card = marker, dark = false)
+                // Mark the whole surface, including its 1dp border. Marking only the
+                // fill locates the border's inner edge, shifting shadow probes into
+                // the rounded surface during scale transitions. The production
+                // border geometry/draw pass and shadow remain unchanged.
+                val colors = LocalDeskColors.current.copy(card = marker, border = marker, dark = false)
                 val currentDensity = LocalDensity.current.density
                 SideEffect { density = currentDensity }
                 CompositionLocalProvider(LocalDeskColors provides colors, LocalReducedMotion provides false) {
@@ -124,19 +128,19 @@ class ShadowRenderingTest {
     @Test fun surfaceIconButtonKeepsItsHaloWhileEnabledOpacityChanges() {
         val enabled = mutableStateOf(true)
         fixture { DeskSurfaceIconButton("menu", "Shadow fixture", enabled = enabled.value) {} }
-        val full = requireNotNull(capture("enabled-full", 44f, 22f))
+        val full = requireNotNull(capture("enabled-full", 48f, 12f))
         assertReference(full)
         compose.runOnIdle { enabled.value = false }
         compose.mainClock.advanceTimeByFrame()
-        val disabling = frames("disabling", 44f, 22f)
+        val disabling = frames("disabling", 48f, 12f)
         assertPartialFrames(disabling, full, minimum = 2)
         compose.mainClock.advanceTimeBy(500)
-        val disabled = requireNotNull(capture("disabled-full", 44f, 22f))
+        val disabled = requireNotNull(capture("disabled-full", 48f, 12f))
         assertEquals("The fixture must actually reach disabled opacity", .4f, disabled.opacity, .04f)
         assertContinuousHalo(disabled, full)
         compose.runOnIdle { enabled.value = true }
         compose.mainClock.advanceTimeByFrame()
-        assertPartialFrames(frames("enabling", 44f, 22f), full, minimum = 2)
+        assertPartialFrames(frames("enabling", 48f, 12f), full, minimum = 2)
         compose.mainClock.advanceTimeBy(500)
         compose.onNodeWithContentDescription("Shadow fixture").assertIsEnabled()
     }
@@ -257,12 +261,13 @@ class ShadowRenderingTest {
 
     private fun capture(name: String, widthDp: Float, radiusDp: Float): Frame? {
         val image = compose.onNodeWithTag("shadow-window", useUnmergedTree = true).captureToImage()
-        val frame = analyze(name, image, widthDp, radiusDp)
         val directory = File(requireNotNull(InstrumentationRegistry.getInstrumentation().targetContext.getExternalFilesDir(null)), "shadow-review")
         assertTrue("Cannot create fixture screenshot directory", directory.isDirectory || directory.mkdirs())
         File(directory, "$name.png").outputStream().use {
             assertTrue(image.asAndroidBitmap().compress(Bitmap.CompressFormat.PNG, 100, it))
         }
+        // Retain a failing frame too, so a failed probe can be inspected directly.
+        val frame = analyze(name, image, widthDp, radiusDp)
         File(directory, "$name.txt").writeText(frame?.toString() ?: "No blue surface")
         return frame
     }

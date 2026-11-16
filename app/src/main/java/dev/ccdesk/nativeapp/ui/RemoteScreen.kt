@@ -52,19 +52,22 @@ fun RemoteScreen(repository: WorkbenchRepository, onNavigate: (String) -> Unit, 
     BackHandler(enabled = active) { if (menu) menu = false else onClose() }
     Box(Modifier.fillMaxSize().then(AbsorbPointerInput).background(c.background).safeDrawingPadding()) {
         Column(Modifier.widthIn(max = 768.dp).fillMaxSize().align(Alignment.TopCenter)) {
-            Row(Modifier.fillMaxWidth().height(68.dp).padding(horizontal = 14.dp),
+            Row(Modifier.fillMaxWidth().heightIn(min = 68.dp).padding(horizontal = 14.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Box(Modifier.background(c.card, CircleShape)) { DeskIconButton("menu", "打开侧栏", iconSize = 22.dp, onClick = onOpenDrawer) }
-                Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { DeskText("远程控制", Modifier.semantics { heading() }, size = 16, weight = FontWeight.SemiBold) }
-                if (allComputers.isNotEmpty()) Box(Modifier.background(c.card, CircleShape)) { DeskIconButton("ellipsis", "远程控制更多选项", iconSize = 23.dp) { menu = true } }
+                Box(Modifier.background(c.card, RoundedCornerShape(14.dp))) { DeskIconButton("menu", "打开侧栏", iconSize = 22.dp, onClick = onOpenDrawer) }
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    DeskText("CCtunnel", size = 11, color = c.primary, weight = FontWeight.SemiBold)
+                    DeskText("远程控制", Modifier.semantics { heading() }, size = 18, weight = FontWeight.SemiBold)
+                }
+                if (allComputers.isNotEmpty()) Box(Modifier.background(c.card, RoundedCornerShape(14.dp))) { DeskIconButton("ellipsis", "远程控制更多选项", iconSize = 23.dp) { menu = true } }
             }
             if (allComputers.isNotEmpty() || query.isNotBlank()) Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth().height(48.dp)
-                .clip(CircleShape).background(c.muted).padding(start = 16.dp, end = 6.dp),
+                .clip(RoundedCornerShape(16.dp)).background(c.card).border(1.dp, c.border, RoundedCornerShape(16.dp)).padding(start = 16.dp, end = 6.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 DeskIcon("search", size = 20.dp, tint = c.mutedForeground)
                 BasicTextField(query, { query = it }, Modifier.weight(1f).semantics { contentDescription = "查找电脑或会话" },
                     textStyle = TextStyle(fontFamily = FontFamily.SansSerif, color = c.foreground, fontSize = 16.sp),
-                    cursorBrush = SolidColor(c.foreground), singleLine = true,
+                    cursorBrush = SolidColor(c.primary), singleLine = true,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                     decorationBox = { inner -> Box { if (query.isEmpty()) DeskText("查找电脑或会话", size = 16, color = c.mutedForeground); inner() } })
                 if (query.isNotEmpty()) DeskIconButton("x", "清除远程控制搜索", iconSize = 17.dp) { query = "" }
@@ -83,7 +86,13 @@ fun RemoteScreen(repository: WorkbenchRepository, onNavigate: (String) -> Unit, 
                 RemoteEmptyState(Modifier.weight(1f), query.isNotBlank(), state.status,
                     onClear = { query = "" }, onConnect = { onNavigate("connection") }, onHelp = { onNavigate("help") })
             } else {
-                LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    item(key = "computer-summary") {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            DeskText("电脑与会话", size = 13, color = c.primary, weight = FontWeight.SemiBold)
+                            DeskText("${computers.size} 台电脑", size = 13, color = c.mutedForeground)
+                        }
+                    }
                     computers.forEach { computer ->
                         item(key = computer.device.id) {
                             RemoteComputerCard(computer, expanded = collapsed[computer.device.id] != true || query.isNotBlank(),
@@ -111,7 +120,9 @@ fun RemoteScreen(repository: WorkbenchRepository, onNavigate: (String) -> Unit, 
     Column(modifier.fillMaxWidth()) {
         Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 32.dp, end = 32.dp, top = 40.dp, bottom = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             if (loading) Box(Modifier.size(60.dp), contentAlignment = Alignment.Center) { DeskSpinner("正在读取电脑", 32.dp) }
-            else DeskIcon(if (searching) "search" else "remote", size = 60.dp, strokeWidth = 2.4f)
+            else Box(Modifier.size(72.dp).background(c.accent, RoundedCornerShape(20.dp)), contentAlignment = Alignment.Center) {
+                DeskIcon(if (searching) "search" else "remote", size = 36.dp, tint = c.primary, strokeWidth = 1.8f)
+            }
             Spacer(Modifier.height(12.dp))
             androidx.compose.material3.Text(if (searching) "未找到电脑或会话" else if (loading) "正在连接" else "设置远程功能", color = c.foreground,
                 fontFamily = FontFamily.SansSerif, fontSize = 24.sp, lineHeight = 34.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
@@ -142,10 +153,10 @@ fun RemoteScreen(repository: WorkbenchRepository, onNavigate: (String) -> Unit, 
 
 @Composable private fun RemotePill(label: String, filled: Boolean, onClick: () -> Unit) {
     val c = LocalDeskColors.current
-    Box(Modifier.fillMaxWidth().heightIn(min = 44.dp).clip(CircleShape).background(if (filled) c.foreground else Color.Transparent)
-        .then(if (filled) Modifier else Modifier.border(1.dp, c.border, CircleShape)).deskPressable(if (filled) c.background.copy(alpha = .12f) else c.muted, 28.dp, onClick = onClick)
-        .semantics { role = Role.Button }.padding(horizontal = 18.dp, vertical = 10.dp), contentAlignment = Alignment.Center) {
-        DeskText(label, size = 16, lineHeight = 24, weight = FontWeight.SemiBold, color = if (filled) c.background else c.foreground)
+    Box(Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(14.dp)).background(if (filled) c.primary else c.card)
+        .then(if (filled) Modifier else Modifier.border(1.dp, c.border, RoundedCornerShape(14.dp))).deskPressable(if (filled) c.onPrimary.copy(alpha = .12f) else c.muted, 14.dp, onClick = onClick)
+        .semantics { role = Role.Button }.padding(horizontal = 18.dp, vertical = 12.dp), contentAlignment = Alignment.Center) {
+        DeskText(label, size = 16, lineHeight = 24, weight = FontWeight.SemiBold, color = if (filled) c.onPrimary else c.foreground)
     }
 }
 
@@ -153,7 +164,9 @@ fun RemoteScreen(repository: WorkbenchRepository, onNavigate: (String) -> Unit, 
     val c = LocalDeskColors.current
     Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).deskPressable(c.muted, 18.dp, onClick = onClick)
         .semantics { role = Role.Button }.padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-        DeskIcon(icon, size = 23.dp)
+        Box(Modifier.size(32.dp).background(c.secondary, RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) {
+            DeskIcon(icon, size = 20.dp, tint = c.primary)
+        }
         DeskText(label, Modifier.weight(1f), size = 16)
         DeskIcon("chevron-right", size = 16.dp, tint = c.mutedForeground)
     }
@@ -168,34 +181,40 @@ fun RemoteScreen(repository: WorkbenchRepository, onNavigate: (String) -> Unit, 
         RemoteComputerStatus.DISCONNECTED -> "连接中断"
     }
     val statusColor = when (computer.status) {
-        RemoteComputerStatus.ONLINE -> Color(0xff20a66a)
+        RemoteComputerStatus.ONLINE -> c.primary
         RemoteComputerStatus.PREPARING -> Color(0xffc28b26)
         else -> c.mutedForeground
     }
-    Column(Modifier.fillMaxWidth().testTag("remote-device:${computer.device.id}").clip(RoundedCornerShape(24.dp))
-        .background(c.card).border(1.dp, c.border.copy(alpha = .65f), RoundedCornerShape(24.dp))) {
-        Row(Modifier.fillMaxWidth().heightIn(min = 82.dp).deskPressable(c.muted, 24.dp, onClick = onToggle)
+    val offlineHistory = computer.status == RemoteComputerStatus.OFFLINE || computer.status == RemoteComputerStatus.DISCONNECTED
+    Column(Modifier.fillMaxWidth().testTag("remote-device:${computer.device.id}").clip(RoundedCornerShape(20.dp))
+        .background(c.card).border(1.dp, c.border, RoundedCornerShape(20.dp))) {
+        Row(Modifier.fillMaxWidth().heightIn(min = 82.dp).deskPressable(c.muted, 20.dp, onClick = onToggle)
             .semantics { role = Role.Button; contentDescription = "电脑：${computer.name}"; stateDescription = "$statusLabel，${if (expanded) "已展开" else "已收起"}" }
             .padding(horizontal = 18.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            DeskIcon("monitor-smartphone", size = 26.dp, strokeWidth = 1.7f)
+            Box(Modifier.size(40.dp).background(if (offlineHistory) c.secondary else c.accent, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+                DeskIcon("monitor", size = 24.dp, tint = if (offlineHistory) c.mutedForeground else c.primary, strokeWidth = 1.8f)
+            }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 DeskText(computer.name, size = 17, weight = FontWeight.Medium, maxLines = 1)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Box(Modifier.size(6.dp).background(statusColor, CircleShape))
-                    DeskText("$statusLabel · ${computer.sessions.size} 个会话" + if (computer.duplicateName) " · ${computer.device.id.takeLast(6)}" else "", size = 12, color = c.mutedForeground, maxLines = 1)
+                    DeskText("$statusLabel · ${computer.sessions.size} 个会话" + if (computer.duplicateName) " · ${computer.device.id.takeLast(6)}" else "", size = 12, color = c.mutedForeground, maxLines = 2)
                 }
             }
             DeskChevron(expanded, size = 18.dp)
         }
         DeskExpandable(expanded) {
-            Column(Modifier.padding(start = 14.dp, end = 14.dp, bottom = 12.dp)) {
+            Column(Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp)) {
+                Box(Modifier.fillMaxWidth().padding(horizontal = 6.dp).height(1.dp).background(c.border))
+                if (offlineHistory) DeskText(if (computer.status == RemoteComputerStatus.DISCONNECTED) "已保留历史 · 连接工作台后查看状态" else "离线历史 · 电脑上线后可继续执行", Modifier.padding(horizontal = 8.dp, vertical = 10.dp), size = 12, color = c.mutedForeground)
                 if (computer.sessions.isEmpty()) DeskText("这台电脑还没有会话", Modifier.padding(horizontal = 12.dp, vertical = 14.dp), size = 14, color = c.mutedForeground)
                 computer.sessions.forEach { session ->
                     key(session.id) {
-                        Row(Modifier.fillMaxWidth().heightIn(min = 68.dp).deskPressable(c.muted, 16.dp, selected = selectedId == session.id) { onOpen(session) }
+                        Row(Modifier.fillMaxWidth().heightIn(min = 68.dp).deskPressable(c.accent, 12.dp, selected = selectedId == session.id) { onOpen(session) }
                             .semantics { role = Role.Button; contentDescription = "打开会话：${session.title}"; selected = selectedId == session.id }
                             .padding(horizontal = 12.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            if (session.id in pins) DeskIcon("pin", size = 17.dp, tint = c.mutedForeground)
+                            Box(Modifier.size(3.dp, 28.dp).background(if (selectedId == session.id) c.primary else c.border, RoundedCornerShape(2.dp)))
+                            if (session.id in pins) DeskIcon("pin", size = 17.dp, tint = c.primary)
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                                 DeskText(session.title, size = 16, maxLines = 2)
                                 val project = session.projectPath.trimEnd('/', '\\').substringAfterLast('/').substringAfterLast('\\')

@@ -86,7 +86,7 @@ class OverlayInteractionTest {
         compose.onAllNodesWithTag(OverlayPanelTag).assertCountEquals(0)
     }
 
-    @Test fun panelTapsStayInsideScrimTapDismissesOnceAndClosingLayerPassesInputThrough() {
+    @Test fun panelTapsStayInsideAndClosingLayerBlocksRapidSecondTap() {
         val visible = mutableStateOf(true); val dismissals = mutableListOf<Unit>(); val background = mutableIntStateOf(0); val inside = mutableIntStateOf(0)
         compose.setContent {
             DeskTheme {
@@ -106,15 +106,70 @@ class OverlayInteractionTest {
         compose.mainClock.advanceTimeByFrame()
         assertEquals(1, dismissals.size)
         assertEquals("The first scrim tap is consumed by the overlay", 0, background.intValue)
-        // Mid-exit: the fading scrim no longer intercepts, and a second tap cannot dismiss twice.
+        // Mid-exit: the visible scrim still owns input, without dismissing twice.
         compose.mainClock.advanceTimeBy(64)
         compose.onNodeWithTag("window").performTouchInput { click(Offset(centerX, 40f)) }
         compose.mainClock.advanceTimeByFrame()
         assertEquals(1, dismissals.size)
-        assertEquals("A closing scrim must let input through", 1, background.intValue)
+        assertEquals("A fading scrim must not expose background actions to a rapid second tap", 0, background.intValue)
         compose.mainClock.autoAdvance = true
         compose.waitForIdle()
         compose.onAllNodesWithTag(OverlayScrimTag).assertCountEquals(0)
+        compose.onNodeWithTag("window").performTouchInput { click(Offset(centerX, 40f)) }
+        compose.runOnIdle { assertEquals("Input returns after the final exit frame", 1, background.intValue) }
+    }
+
+    @Test fun anchoredMenuBlocksTouchesUntilItsExitFinishesAndCanReverse() {
+        val visible = mutableStateOf(true)
+        val background = mutableIntStateOf(0)
+        var dismissals = 0
+        compose.setContent {
+            DeskTheme {
+                Box(Modifier.fillMaxSize().clickable { background.intValue++ }.testTag("window")) {
+                    DeskAnchoredOverlay(visible.value, { dismissals++; visible.value = false }) {
+                        Box(Modifier.fillMaxWidth().height(100.dp))
+                    }
+                }
+            }
+        }
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithTag("window").performTouchInput { click(Offset(centerX, height - 40f)) }
+        compose.mainClock.advanceTimeBy(64)
+        compose.onNodeWithTag("window").performTouchInput { click(Offset(centerX, height - 40f)) }
+        assertEquals(1, dismissals)
+        assertEquals("Menu exit cannot activate underlying content", 0, background.intValue)
+        compose.runOnIdle { visible.value = true }
+        compose.mainClock.advanceTimeBy(500)
+        compose.onNodeWithContentDescription("关闭菜单").assertExists().performClick()
+        compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
+        compose.onNodeWithTag("window").performTouchInput { click(Offset(centerX, height - 40f)) }
+        compose.runOnIdle { assertEquals(2, dismissals); assertEquals(1, background.intValue) }
+    }
+
+    @Test fun closingDuringAHeldDragContinuesFromTheFingerPosition() {
+        val visible = mutableStateOf(true)
+        setOverlay(visible, mutableListOf())
+        compose.waitForIdle()
+        val density = compose.activity.resources.displayMetrics.density
+        compose.onNodeWithTag("handle").performTouchInput {
+            down(center)
+            repeat(10) { moveBy(Offset(0f, 6f * density), delayMillis = 32) }
+        }
+        val held = compose.onNodeWithTag(OverlayPanelTag).fetchSemanticsNode().boundsInRoot.top
+        compose.mainClock.autoAdvance = false
+        compose.runOnIdle { visible.value = false }
+        compose.mainClock.advanceTimeByFrame()
+        val closingStart = compose.onNodeWithTag(OverlayPanelTag, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.top
+        assertEquals("Closing must retain the current drag position", held, closingStart, 2f * density)
+        compose.mainClock.advanceTimeBy(64)
+        val moving = compose.onNodeWithTag(OverlayPanelTag, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.top
+        assertTrue("The exit must move away from the held position instead of freezing", moving > held + density)
+        compose.onRoot().performTouchInput { cancel() }
+        compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
+        compose.onAllNodesWithTag(OverlayPanelTag).assertCountEquals(0)
     }
 
     @Test fun systemBackClosesOnlyTheOpenOverlayAndRepeatedBackReachesTheScreenBelow() {

@@ -132,8 +132,8 @@ private val modelPages=mapOf("models" to 0,"more" to 1,"custom" to 2)
                     val enabled=!locked&&custom.isNotBlank()
                     val interaction=remember{MutableInteractionSource()};val pressed by interaction.pressedState()
                     val alpha=animatedEnabledAlpha(enabled)
-                    Box(Modifier.fillMaxWidth().heightIn(min=44.dp).pressScale(pressed,enabled).graphicsLayer{this.alpha=alpha;compositingStrategy=CompositingStrategy.ModulateAlpha}.clip(RoundedCornerShape(12.dp)).background(c.foreground).clickable(enabled=enabled,interactionSource=interaction,indication=null){select(custom.trim())}.semantics{role=Role.Button;contentDescription="使用此模型"},contentAlignment=Alignment.Center){
-                        NativeSpanText("使用此模型",size=14,lineHeight=null,color=c.background,weight=600,selectable=false,exposeText=false)
+                    Box(Modifier.fillMaxWidth().heightIn(min=48.dp).pressScale(pressed,enabled).graphicsLayer{this.alpha=alpha;compositingStrategy=CompositingStrategy.ModulateAlpha}.clip(RoundedCornerShape(12.dp)).background(c.primary).clickable(enabled=enabled,interactionSource=interaction,indication=null){select(custom.trim())}.semantics{role=Role.Button;contentDescription="使用此模型"},contentAlignment=Alignment.Center){
+                        NativeSpanText("使用此模型",size=14,lineHeight=null,color=c.onPrimary,weight=600,selectable=false,exposeText=false)
                     }
                 }
             }
@@ -204,12 +204,12 @@ private val modelPages=mapOf("models" to 0,"more" to 1,"custom" to 2)
     val pressed by interaction.pressedState()
     val inherited=LocalViewConfiguration.current
     val touchConfiguration=remember(inherited,extent,hitSlop){object:ViewConfiguration by inherited{
-        override val minimumTouchTargetSize=DpSize((extent+2*hitSlop).dp,(extent+2*hitSlop).dp)
+        override val minimumTouchTargetSize=DpSize(maxOf(48,extent+2*hitSlop).dp,maxOf(48,extent+2*hitSlop).dp)
     }}
     val highlight=animatedHighlight(pressed&&enabled,false,LocalDeskColors.current.muted)
     val alpha=animatedEnabledAlpha(enabled,.4f)
     CompositionLocalProvider(LocalViewConfiguration provides touchConfiguration){
-        Box(Modifier.size(extent.dp).graphicsLayer{this.alpha=alpha}.pressScale(pressed,enabled,DeskMotion.IconPressScale).clip(RoundedCornerShape(100.dp)).background(highlight).clickable(enabled=enabled,interactionSource=interaction,indication=null,onClick=onClick).semantics{contentDescription=label;role=Role.Button},contentAlignment=Alignment.Center){DeskIcon(icon,size=iconSize.dp,tint=tint)}
+        Box(Modifier.size(extent.dp).graphicsLayer{this.alpha=alpha}.pressScale(pressed,enabled,DeskMotion.IconPressScale).clip(RoundedCornerShape(12.dp)).background(highlight).clickable(enabled=enabled,interactionSource=interaction,indication=null,onClick=onClick).semantics{contentDescription=label;role=Role.Button},contentAlignment=Alignment.Center){DeskIcon(icon,size=iconSize.dp,tint=tint)}
     }
 }
 
@@ -224,7 +224,7 @@ private val modelPages=mapOf("models" to 0,"more" to 1,"custom" to 2)
     }
     val hintState=buildList{if(enabled)add(android.R.attr.state_enabled);if(focused)add(android.R.attr.state_focused)}.toIntArray()
     val hintColor=Color(hintTint.getColorForState(hintState,hintTint.defaultColor))
-    val border by animateColorAsState(if(focused)c.mutedForeground else c.border,DeskMotion.state(),label="field border")
+    val border by animateColorAsState(if(focused)c.primary else c.border,DeskMotion.state(),label="field border")
     BasicTextField(value,{onChange(it.take(200))},Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).border(1.dp,border,RoundedCornerShape(12.dp)).background(c.background).padding(1.dp).padding(12.dp).onFocusChanged{focused=it.isFocused}.semantics{contentDescription="模型标识"},enabled=enabled,singleLine=true,
         textStyle=TextStyle(color=c.foreground,fontSize=16.sp,lineHeight=24.sp,platformStyle=PlatformTextStyle(includeFontPadding=true)),cursorBrush=SolidColor(cursorColor),
         keyboardOptions=KeyboardOptions(autoCorrectEnabled=false,imeAction=ImeAction.Done),keyboardActions=KeyboardActions(onDone={onSubmit()}),
@@ -248,9 +248,9 @@ private val modelPages=mapOf("models" to 0,"more" to 1,"custom" to 2)
 @Composable private fun ModelRow(label:String,detail:String="",checked:Boolean?=null,disabled:Boolean=false,compact:Boolean=false,icon:String?=null,trailing:Boolean=false,loading:Boolean=false,onClick:()->Unit){
     val c=LocalDeskColors.current
     val interaction=remember{MutableInteractionSource()};val pressed by interaction.pressedState()
-    val highlight=animatedHighlight(pressed&&!disabled,false,c.muted)
+    val highlight=animatedHighlight(pressed&&!disabled,checked==true,c.muted,c.accent)
     val alpha=animatedEnabledAlpha(!disabled||loading,.5f)
-    Row(Modifier.fillMaxWidth().heightIn(min=if(compact)48.dp else 60.dp).graphicsLayer{this.alpha=alpha}.clip(RoundedCornerShape(20.dp)).background(highlight).clickable(enabled=!disabled,interactionSource=interaction,indication=null,onClick=onClick).semantics(mergeDescendants=true){text=AnnotatedString(label);role=if(checked==null)Role.Button else Role.RadioButton;if(checked!=null)selected=checked;if(detail.isNotEmpty())contentDescription=label+"，"+detail}.padding(horizontal=12.dp,vertical=if(compact)10.dp else 12.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(16.dp)){
+    Row(Modifier.fillMaxWidth().heightIn(min=if(compact)48.dp else 60.dp).graphicsLayer{this.alpha=alpha}.clip(RoundedCornerShape(12.dp)).background(highlight).clickable(enabled=!disabled,interactionSource=interaction,indication=null,onClick=onClick).semantics(mergeDescendants=true){text=AnnotatedString(label);role=if(checked==null)Role.Button else Role.RadioButton;if(checked!=null)selected=checked;if(detail.isNotEmpty())contentDescription=label+"，"+detail}.padding(horizontal=12.dp,vertical=if(compact)10.dp else 12.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(16.dp)){
         if(icon!=null)Box(Modifier.size(18.dp),contentAlignment=Alignment.Center){
             val spin by animateFloatAsState(if(loading)1f else 0f,DeskMotion.icon(),label="row loading")
             DeskIcon(icon,Modifier.graphicsLayer{this.alpha=1f-spin},size=18.dp)
@@ -259,7 +259,7 @@ private val modelPages=mapOf("models" to 0,"more" to 1,"custom" to 2)
         Column(Modifier.weight(1f)){NativeSpanText(label,size=16,weight=400,lineHeight=24,selectable=false,exposeText=false);if(detail.isNotEmpty())NativeSpanText(detail,Modifier.padding(top=2.dp),size=13,color=c.mutedForeground,lineHeight=19,maxLines=2,selectable=false,exposeText=false)}
         if(checked!=null){
             val mark by animateFloatAsState(if(checked)1f else 0f,DeskMotion.icon(),label="check")
-            if(checked||mark>.01f)DeskIcon("check",Modifier.graphicsLayer{scaleX=.4f+.6f*mark;scaleY=.4f+.6f*mark;this.alpha=mark.coerceIn(0f,1f)},size=20.dp,tint=Color(0xff3562f6),strokeWidth=2.2f)
+            if(checked||mark>.01f)DeskIcon("check",Modifier.graphicsLayer{scaleX=.85f+.15f*mark;scaleY=.85f+.15f*mark;this.alpha=mark.coerceIn(0f,1f)},size=20.dp,tint=c.primary,strokeWidth=2.2f)
         }else if(trailing)DeskIcon("chevron-right",size=16.dp,tint=c.mutedForeground)
     }
 }
@@ -268,8 +268,8 @@ private val modelPages=mapOf("models" to 0,"more" to 1,"custom" to 2)
 @Composable internal fun SettingsGroup(title:String?,card:Boolean=true,content:@Composable ColumnScope.()->Unit){
     val c=LocalDeskColors.current
     Column(Modifier.fillMaxWidth(),verticalArrangement=Arrangement.spacedBy(8.dp)){
-        if(title!=null)SNativeText(title,Modifier.padding(start=4.dp).semantics{heading()},size=13,lineHeight=18,color=c.mutedForeground,weight=FontWeight.Medium,heading=true)
-        if(card)Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).border(1.dp,c.border,RoundedCornerShape(28.dp)).background(c.card),content=content)
+        if(title!=null)SNativeText(title,Modifier.padding(start=4.dp).semantics{heading()},size=13,lineHeight=18,color=c.primary,weight=FontWeight.SemiBold,heading=true)
+        if(card)Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).border(1.dp,c.border,RoundedCornerShape(20.dp)).background(c.card),content=content)
         else Column(Modifier.fillMaxWidth(),verticalArrangement=Arrangement.spacedBy(10.dp),content=content)
     }
 }
@@ -282,8 +282,8 @@ private val modelPages=mapOf("models" to 0,"more" to 1,"custom" to 2)
     val highlight=animatedHighlight(pressed&&enabled,false,c.accent)
     val alpha=animatedEnabledAlpha(enabled||loading)
     Row(Modifier.fillMaxWidth().heightIn(min=54.dp).graphicsLayer{this.alpha=alpha}.background(highlight).clickable(enabled=enabled&&!loading,interactionSource=interaction,indication=null,onClick=onClick).semantics{text=AnnotatedString(label);role=Role.Button}.padding(horizontal=16.dp,vertical=12.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(16.dp)){
-        Box(Modifier.size(22.dp),contentAlignment=Alignment.Center){
-            AnimatedContent(loading,transitionSpec={fadeIn(DeskMotion.fadeIn())togetherWith fadeOut(DeskMotion.fadeOut())},label="row icon"){busy->if(busy)DeskSpinner(label,20.dp)else DeskIcon(icon,size=22.dp,tint=c.foreground,strokeWidth=1.8f)}
+        Box(Modifier.size(32.dp).background(c.secondary,RoundedCornerShape(10.dp)),contentAlignment=Alignment.Center){
+            AnimatedContent(loading,transitionSpec={fadeIn(DeskMotion.fadeIn())togetherWith fadeOut(DeskMotion.fadeOut())},label="row icon"){busy->if(busy)DeskSpinner(label,20.dp)else DeskIcon(icon,size=20.dp,tint=c.primary,strokeWidth=1.8f)}
         }
         Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(2.dp)){
             NativeSpanText(label,size=16,lineHeight=24,selectable=false,exposeText=false)

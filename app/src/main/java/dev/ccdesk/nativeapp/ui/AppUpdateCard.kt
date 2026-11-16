@@ -67,9 +67,12 @@ internal val LocalAppUpdates = staticCompositionLocalOf<AppUpdateRepository?> { 
         latest == null -> "当前渠道暂无可安装版本"
         else -> "当前版本无需更新"
     }
-    Column(Modifier.fillMaxWidth().testTag("app-update-card"), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        DeskText("App 更新", Modifier.semantics { heading() }, size = 14, weight = FontWeight.SemiBold)
-        Box(Modifier.fillMaxWidth().height(1.dp).background(c.border))
+    Column(Modifier.fillMaxWidth().testTag("app-update-card").clip(RoundedCornerShape(20.dp))
+        .background(c.card).border(1.dp, c.border, RoundedCornerShape(20.dp)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Box(Modifier.size(32.dp).background(c.secondary, RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) { DeskIcon("refresh-cw", size = 20.dp, tint = c.primary) }
+            DeskText("App 更新", Modifier.semantics { heading() }, size = 16, weight = FontWeight.SemiBold)
+        }
         DeskText("CCtunnel ${state.currentVersion}", size = 15, weight = FontWeight.Medium)
         DeskText(status, Modifier.testTag("app-update-status").semantics { liveRegion = LiveRegionMode.Polite }, size = 14)
         state.error?.let { DeskText(it, size = 13, color = c.mutedForeground) }
@@ -80,7 +83,7 @@ internal val LocalAppUpdates = staticCompositionLocalOf<AppUpdateRepository?> { 
         DeskAction(if (state.error == null) "检查更新" else "重试检查", enabled = !state.checking,
             loading = state.checking, modifier = Modifier.fillMaxWidth().testTag("app-update-check"), onClick = onCheck)
         if (state.updateAvailable && latest != null) {
-            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(c.muted).padding(12.dp),
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(c.secondary).padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 DeskText(latest.name.ifBlank { latest.tagName }, size = 15, weight = FontWeight.Medium)
                 DeskText(if (latest.prerelease) "公开测试版" else "正式版", size = 12, color = c.mutedForeground)
@@ -112,7 +115,7 @@ internal val LocalAppUpdates = staticCompositionLocalOf<AppUpdateRepository?> { 
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.pressedState()
     val offset by animateFloatAsState(if (checked) 18f else 0f, DeskMotion.state(), label = "update switch thumb")
-    val color by animateColorAsState(if (checked) c.foreground else c.muted, DeskMotion.state(), label = "update switch track")
+    val color by animateColorAsState(if (checked) c.primary else c.muted, DeskMotion.state(), label = "update switch track")
     Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag(tag)
         .background(animatedHighlight(pressed, false, c.muted), RoundedCornerShape(8.dp))
         .toggleable(checked, interactionSource = interaction, indication = null, role = Role.Switch) { haptics.toggle(it); onChange(it) }
@@ -122,7 +125,7 @@ internal val LocalAppUpdates = staticCompositionLocalOf<AppUpdateRepository?> { 
             DeskText(detail, size = 12, color = c.mutedForeground)
         }
         Box(Modifier.size(42.dp, 24.dp).clip(CircleShape).background(color).border(1.dp, c.border, CircleShape).padding(3.dp)) {
-            Box(Modifier.offset(x = offset.dp).size(18.dp).background(if (checked) c.background else c.mutedForeground, CircleShape))
+            Box(Modifier.offset(x = offset.dp).size(18.dp).background(if (checked) c.onPrimary else c.mutedForeground, CircleShape))
         }
     }
 }
@@ -131,6 +134,6 @@ internal val LocalAppUpdates = staticCompositionLocalOf<AppUpdateRepository?> { 
 @Composable internal fun AppUpdateBadge() {
     val repository = LocalAppUpdates.current ?: return
     val state by repository.state.collectAsStateWithLifecycle()
-    if (state.updateAvailable) Box(Modifier.size(7.dp).background(LocalDeskColors.current.foreground, CircleShape)
+    if (state.updateAvailable) Box(Modifier.size(7.dp).background(LocalDeskColors.current.primary, CircleShape)
         .semantics { contentDescription = "有新的 App 版本" })
 }

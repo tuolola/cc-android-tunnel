@@ -5,7 +5,9 @@
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowActionModeOverlay">true</item>
-        <item name="android:windowBackground">#191919</item>
-        <item name="colorPrimary">#023c69</item>
+        <item name="android:windowBackground">#262624</item>
+        <item name="colorPrimary">#e0a184</item>
+        <item name="colorAccent">#e0a184</item>
+        <item name="colorControlActivated">#e0a184</item>
     </style>
 </resources>

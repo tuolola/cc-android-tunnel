@@ -16,7 +16,8 @@ class ProtocolTest {
     private val serviceCredential = "test-service-credential-0123456789"
     private class FakeSocket(val url: String, val observer: SocketObserver) : SocketConnection {
         val sent = mutableListOf<JSONObject>(); var closed = false
-        override fun send(text: String): Boolean { sent += JSONObject(text); return !closed }
+        var onSend: ((JSONObject) -> Unit)? = null
+        override fun send(text: String): Boolean { val frame = JSONObject(text); sent += frame; if (!closed) onSend?.invoke(frame); return !closed }
         override fun close() { closed = true }
         fun frame(frame: JSONObject) {
             // Real snapshots always echo the history request ID.
@@ -55,7 +56,252 @@ class ProtocolTest {
     private fun event(sequence: Long, text: String = "part", id: String = "s") = json("sessionId" to id,"runId" to "r","sequence" to sequence,"createdAt" to "2026-01-01T00:00:00Z","payload" to json("type" to "text.delta","messageId" to "m","text" to text))
     private fun ready(socket: FakeSocket) {
         socket.observer.opened()
-        socket.frame(json("type" to "ready","protocolVersion" to 25,"sessions" to JSONArray().put(session()),"version" to "test"))
+        socket.frame(json("type" to "ready","protocolVersion" to 26,"sessions" to JSONArray().put(session()),"version" to "test"))
+    }
+
+    private fun historyRequest(socket: FakeSocket, type: String = "session.subscribe", sessionId: String? = null) =
+        socket.sent.last { it.optString("type") == type && (sessionId == null || it.optString("sessionId") == sessionId) }
+    private fun snapshot(request: JSONObject, events: JSONArray = JSONArray().put(event(1)), mode: String = "replace", hasEarlier: Boolean = false) =
+        json("type" to "session.snapshot", "requestId" to request.getString("requestId"),
+            "session" to session(request.getString("sessionId")), "mode" to mode, "hasEarlier" to hasEarlier, "events" to events)
+    private fun historyPart(request: JSONObject, data: Any, last: Any = false, sessionId: String = request.getString("sessionId")) =
+        json("type" to "session.history.part", "requestId" to request.getString("requestId"), "sessionId" to sessionId, "data" to data, "last" to last)
+    private fun completeHistory(socket: FakeSocket, request: JSONObject, page: JSONObject = snapshot(request)) {
+        socket.frame(historyPart(request, JSONArray().put(page).toString(), true))
+        socket.response(request.getString("requestId"))
+    }
+    private fun fragment(text: String, messageId: String = "live", sessionId: String = "s") =
+        json("type" to "session.fragment", "sessionId" to sessionId, "runId" to "r",
+            "payload" to json("type" to "text.delta", "messageId" to messageId, "text" to text))
+
+    @Test fun historyPartsRenewTheIdleDeadlineBeyondNinetySecondsAndPreserveSplitUnicode() = runTest {
+        val t = FakeTransport(); val repo = WorkbenchRepository(t, StandardTestDispatcher(testScheduler))
+        try {
+            repo.connectService("wss://example.test/ws", serviceCredential); val socket = t.sockets.single(); ready(socket); runCurrent()
+            val read = async { repo.selectSession("s") }; runCurrent(); val request = historyRequest(socket)
+            val text = "跨片中文🙂𠮷é"
+            val body = JSONArray().put(snapshot(request, JSONArray().put(event(1, text)))).toString()
+            val boundary = body.indexOf("🙂") + 1
+            advanceTimeBy(80_000); runCurrent()
+            socket.frame(historyPart(request, "[", false).put("requestId", "another-request")); runCurrent()
+            assertFalse(socket.sent.any { it.optString("type") == "session.history.next" })
+            socket.frame(historyPart(request, body.substring(0, boundary))); runCurrent()
+            advanceTimeBy(80_000); runCurrent()
+            assertFalse(read.isCompleted); assertTrue(repo.state.value.histories.getValue("s").events.isEmpty())
+            socket.frame(historyPart(request, body.substring(boundary, body.length - 1))); runCurrent()
+            advanceTimeBy(80_000); runCurrent(); assertFalse(read.isCompleted)
+            socket.frame(historyPart(request, body.takeLast(1), true)); socket.response(request.getString("requestId")); runCurrent(); read.await()
+            assertEquals(text, repo.state.value.histories.getValue("s").events.single().payload.getString("text"))
+            val acknowledgements = socket.sent.filter { it.optString("type") == "session.history.next" }
+            assertEquals(3, acknowledgements.size)
+            assertTrue(acknowledgements.all { it.getString("requestId") == request.getString("requestId") && it.length() == 2 })
+            assertFalse(repo.state.value.histories.getValue("s").loading)
+            assertFalse(socket.sent.any { it.optString("type") == "session.history.cancel" })
+        } finally { repo.dispose() }
+    }
+
+    @Test fun lastPartIsCommittedBeforeNextCanSynchronouslyDeliverTheOriginalResponse() = runTest {
+        val t = FakeTransport(); val repo = WorkbenchRepository(t, StandardTestDispatcher(testScheduler))
+        try {
+            repo.connectService("wss://example.test/ws", serviceCredential); val socket = t.sockets.single(); ready(socket); runCurrent()
+            val reading = async { repo.selectSession("s") }; runCurrent(); val request = historyRequest(socket)
+            var replies = 0
+            socket.onSend = { frame ->
+                if (frame.optString("type") == "session.history.next") {
+                    assertEquals("Snapshot must already be committed at the last ACK", "Committed before ACK",
+                        repo.state.value.histories.getValue("s").events.single().payload.getString("text"))
+                    replies++
+                    socket.response(frame.getString("requestId"))
+                }
+            }
+            socket.frame(historyPart(request, JSONArray().put(snapshot(request, JSONArray().put(event(1, "Committed before ACK")))).toString(), true))
+            runCurrent(); reading.await()
+            assertEquals(1, replies)
+            assertFalse(repo.state.value.histories.getValue("s").loading)
+            assertNull(repo.state.value.histories.getValue("s").loadError)
+            assertFalse(socket.sent.any { it.optString("type") == "session.history.cancel" })
+        } finally { repo.dispose() }
+    }
+
+    @Test fun pendingHistoryDoesNotBlockConcurrentCatalogStatusCapabilities() = runTest {
+        val t = FakeTransport(); val repo = WorkbenchRepository(t, StandardTestDispatcher(testScheduler))
+        try {
+            repo.connectService("wss://example.test/ws", serviceCredential); val socket = t.sockets.single(); ready(socket); runCurrent()
+            repo.openSession("s"); runCurrent(); val request = historyRequest(socket)
+            socket.frame(historyPart(request, "[")); runCurrent()
+            val catalog = async { repo.loadModelCatalog("s") }; runCurrent()
+            val status = socket.sent.single { it.optString("type") == "session.status" }
+            val capabilities = event(20).put("payload", json("type" to "native.capabilities",
+                "models" to JSONArray().put(json("value" to "parallel-model", "displayName" to "Parallel model"))))
+            socket.frame(json("type" to "session.event", "event" to capabilities))
+            socket.response(status.getString("requestId")); runCurrent(); catalog.await()
+            assertEquals("parallel-model", repo.state.value.modelCatalogs.getValue("server").models.single().value)
+            assertTrue(repo.state.value.modelCatalogLoading.isEmpty()); assertTrue(repo.state.value.modelCatalogErrors.isEmpty())
+            assertTrue("The separate history read still owns its loading state", repo.state.value.histories.getValue("s").loading)
+            assertTrue(repo.state.value.histories.getValue("s").events.isEmpty())
+            val page = JSONArray().put(snapshot(request)).toString()
+            socket.frame(historyPart(request, page.drop(1), true)); socket.response(request.getString("requestId")); runCurrent()
+            assertEquals(listOf(1L, 20L), repo.state.value.histories.getValue("s").events.map { it.sequence })
+            assertFalse(repo.state.value.histories.getValue("s").loading)
+            assertEquals("parallel-model", repo.state.value.modelCatalogs.getValue("server").models.single().value)
+        } finally { repo.dispose() }
+    }
+
+    @Test fun invalidOuterPartsAndMalformedInnerPagesNeverPartiallyCommitSnapshots() = runTest {
+        val cases: List<(JSONObject) -> JSONObject> = listOf(
+            { historyPart(it, 7, true) }, { historyPart(it, "", true) }, { historyPart(it, "x".repeat(32769), true) },
+            { historyPart(it, "[]", "true") }, { historyPart(it, "[]", true, "wrong-session") },
+            { historyPart(it, "[not json", true) }, { historyPart(it, "[]", true) },
+            { historyPart(it, JSONArray().put(snapshot(it).put("requestId", "wrong-request")).toString(), true) },
+            { historyPart(it, JSONArray().put(snapshot(it).put("session", session("wrong-session"))).toString(), true) },
+            { historyPart(it, JSONArray().put(snapshot(it, JSONArray().put(event(1, id = "wrong-session")))).toString(), true) },
+            { historyPart(it, JSONArray().put(snapshot(it, JSONArray().put(event(1).apply { remove("payload") }))).toString(), true) },
+            { request -> historyPart(request, JSONArray().put(snapshot(request).put("session", session().put("title", "Must not commit")))
+                .put(json("type" to "session.updated", "session" to session())).toString(), true) }
+        )
+        for ((index, malformed) in cases.withIndex()) {
+            val t = FakeTransport(); val repo = WorkbenchRepository(t, StandardTestDispatcher(testScheduler))
+            try {
+                repo.connectService("wss://example.test/ws", serviceCredential); val socket = t.sockets.single(); ready(socket); runCurrent()
+                repo.openSession("s"); runCurrent(); val request = historyRequest(socket)
+                socket.frame(malformed(request)); runCurrent()
+                val history = repo.state.value.histories.getValue("s")
+                assertFalse("Case $index must finish loading", history.loading)
+                assertFalse("Case $index must not mark history loaded", history.loaded)
+                assertTrue("Case $index must not commit any events", history.events.isEmpty())
+                assertEquals("Case $index must not update session metadata", "chat", repo.state.value.sessions.single().title)
+                assertNotNull("Case $index must report a retriable failure", history.loadError)
+                assertEquals(1, socket.sent.count { it.optString("type") == "session.history.cancel" })
+                assertFalse(socket.sent.any { it.optString("type") == "session.history.next" })
+                completeHistory(socket, request); runCurrent()
+                assertFalse(repo.state.value.histories.getValue("s").loaded)
+            } finally { repo.dispose() }
+        }
+    }
+
+    @Test fun cancellingAnOlderPageSendsOneControlAndPreservesLoadedHistory() = runTest {
+        val t = FakeTransport(); val repo = WorkbenchRepository(t, StandardTestDispatcher(testScheduler))
+        try {
+            repo.connectService("wss://example.test/ws", serviceCredential); val socket = t.sockets.single(); ready(socket); runCurrent()
+            repo.openSession("s"); runCurrent(); val subscribe = historyRequest(socket)
+            completeHistory(socket, subscribe, snapshot(subscribe, JSONArray().put(event(8, "Keep this")), hasEarlier = true)); runCurrent()
+            val page = async { repo.loadEarlier("s") }; runCurrent(); val request = historyRequest(socket, "session.history")
+            socket.frame(historyPart(request, "[")); runCurrent()
+            page.cancel(); runCurrent()
+            assertTrue(page.isCancelled)
+            assertEquals(1, socket.sent.count { it.optString("type") == "session.history.cancel" && it.optString("requestId") == request.getString("requestId") })
+            assertFalse(repo.state.value.histories.getValue("s").loading)
+            completeHistory(socket, request, snapshot(request, JSONArray().put(event(1)), "prepend")); runCurrent()
+            assertEquals(listOf(8L), repo.state.value.histories.getValue("s").events.map { it.sequence })
+            assertTrue(repo.state.value.histories.getValue("s").hasEarlier)
+        } finally { repo.dispose() }
+    }
+
+    @Test fun newDraftAndDeletionCancelPartialHistoryAndRejectLateFrames() = runTest {
+        for (delete in listOf(false, true)) {
+            val t = FakeTransport(); val repo = WorkbenchRepository(t, StandardTestDispatcher(testScheduler))
+            try {
+                repo.connectService("wss://example.test/ws", serviceCredential); val socket = t.sockets.single(); ready(socket); runCurrent()
+                repo.openSession("s"); runCurrent(); val request = historyRequest(socket)
+                socket.frame(historyPart(request, "[")); runCurrent()
+                if (delete) socket.frame(json("type" to "session.deleted", "sessionId" to "s")) else repo.newDraft()
+                runCurrent()
+                assertNull(repo.state.value.selectedId)
+                assertEquals(1, socket.sent.count { it.optString("type") == "session.history.cancel" })
+                completeHistory(socket, request); socket.frame(fragment("Old subscription")); runCurrent()
+                assertNull(repo.state.value.selectedId)
+                if (delete) {
+                    assertTrue(repo.state.value.sessions.isEmpty()); assertTrue(repo.state.value.histories.isEmpty())
+                } else {
+                    val history = repo.state.value.histories.getValue("s")
+                    assertFalse(history.loading); assertTrue(history.events.isEmpty()); assertTrue(history.fragments.isEmpty())
+                }
+                assertEquals(1, socket.sent.count { it.optString("type") == "session.history.next" })
+            } finally { repo.dispose() }
+        }
+    }
+
+    @Test fun oldGenerationPartsCannotAppendToTheReconnectedHistoryTransfer() = runTest {
+        val t = FakeTransport(); val repo = WorkbenchRepository(t, StandardTestDispatcher(testScheduler))
+        try {
+            repo.connectService("wss://example.test/ws", serviceCredential); val first = t.sockets.single(); ready(first); runCurrent()
+            repo.openSession("s"); runCurrent(); val oldRequest = historyRequest(first)
+            first.frame(historyPart(oldRequest, "[")); runCurrent()
+            repo.reconnect(); val second = t.sockets.last(); ready(second); runCurrent()
+            val current = historyRequest(second)
+            val body = JSONArray().put(snapshot(current, JSONArray().put(event(2, "Current connection")))).toString()
+            second.frame(historyPart(current, body.take(25))); runCurrent()
+            // Even a stale socket frame that guesses the current request ID must be ignored.
+            first.frame(historyPart(current, body.drop(25), true)); completeHistory(first, oldRequest); runCurrent()
+            assertTrue(repo.state.value.histories.getValue("s").loading)
+            assertTrue(repo.state.value.histories.getValue("s").events.isEmpty())
+            second.frame(historyPart(current, body.drop(25), true)); second.response(current.getString("requestId")); runCurrent()
+            assertEquals("Current connection", repo.state.value.histories.getValue("s").events.single().payload.getString("text"))
+            assertEquals(2, second.sent.count { it.optString("type") == "session.history.next" })
+        } finally { repo.dispose() }
+    }
+
+    @Test fun rapidSessionRoundTripKeepsTheNewestReadAsLoadingOwner() = runTest {
+        val t = FakeTransport(); val repo = WorkbenchRepository(t, StandardTestDispatcher(testScheduler))
+        try {
+            repo.connectService("wss://example.test/ws", serviceCredential); val socket = t.sockets.single(); ready(socket)
+            socket.frame(json("type" to "session.updated", "session" to session("b"))); runCurrent()
+            repo.openSession("s"); runCurrent(); val firstA = historyRequest(socket)
+            socket.frame(historyPart(firstA, "[")); runCurrent()
+            repo.openSession("b"); runCurrent(); val b = historyRequest(socket)
+            repo.openSession("s"); runCurrent(); val latestA = historyRequest(socket)
+            assertNotEquals(firstA.getString("requestId"), latestA.getString("requestId"))
+            completeHistory(socket, firstA); completeHistory(socket, b, snapshot(b, JSONArray().put(event(3, id = "b")))); runCurrent()
+            assertEquals("s", repo.state.value.selectedId)
+            assertTrue("Old completion must not clear the newest read's spinner", repo.state.value.histories.getValue("s").loading)
+            assertFalse(repo.state.value.histories.getValue("b").loading)
+            assertTrue(repo.state.value.histories.getValue("s").events.isEmpty())
+            completeHistory(socket, latestA, snapshot(latestA, JSONArray().put(event(9, "Newest A")))); runCurrent()
+            assertFalse(repo.state.value.histories.getValue("s").loading)
+            assertEquals(listOf(9L), repo.state.value.histories.getValue("s").events.map { it.sequence })
+            assertEquals(2, socket.sent.count { it.optString("type") == "session.history.cancel" })
+        } finally { repo.dispose() }
+    }
+
+    @Test fun subscriptionReplaysCapturedFragmentsBeforeBufferedEventsFragmentsAndMetadata() = runTest {
+        val t = FakeTransport(); val repo = WorkbenchRepository(t, StandardTestDispatcher(testScheduler))
+        try {
+            repo.connectService("wss://example.test/ws", serviceCredential); val socket = t.sockets.single(); ready(socket); runCurrent()
+            repo.openSession("s"); runCurrent(); val request = historyRequest(socket)
+            val page = JSONArray().put(snapshot(request, JSONArray().put(event(1, "Snapshot"))))
+                .put(fragment("Captured", "settling")).put(fragment("Head", "growing")).toString()
+            socket.frame(historyPart(request, page.take(20))); runCurrent()
+            socket.frame(json("type" to "session.event", "event" to event(2, "Settled").put("payload", json("type" to "text.delta", "messageId" to "settling", "text" to "Settled"))))
+            socket.frame(fragment("Tail", "growing"))
+            socket.frame(json("type" to "session.updated", "session" to session().put("title", "Newest metadata").put("permissionMode", "auto")))
+            runCurrent()
+            assertEquals("chat", repo.state.value.sessions.single().title)
+            assertTrue(repo.state.value.histories.getValue("s").events.isEmpty()); assertTrue(repo.state.value.histories.getValue("s").fragments.isEmpty())
+            socket.frame(historyPart(request, page.drop(20), true)); socket.response(request.getString("requestId")); runCurrent()
+            val history = repo.state.value.histories.getValue("s")
+            assertEquals(listOf(1L, 2L), history.events.map { it.sequence })
+            assertEquals("HeadTail", history.fragments.single().payload.getString("text"))
+            assertEquals("growing", history.fragments.single().payload.getString("messageId"))
+            assertEquals("Newest metadata", repo.state.value.sessions.single().title)
+            assertEquals("auto", repo.state.value.sessions.single().permissionMode)
+        } finally { repo.dispose() }
+    }
+
+    @Test fun failedPartialSubscriptionDoesNotAdvanceTheRetryCursorFromBufferedLiveEvents() = runTest {
+        val t = FakeTransport(); val repo = WorkbenchRepository(t, StandardTestDispatcher(testScheduler))
+        try {
+            repo.connectService("wss://example.test/ws", serviceCredential); val socket = t.sockets.single(); ready(socket); runCurrent()
+            repo.openSession("s"); runCurrent(); val request = historyRequest(socket)
+            socket.frame(historyPart(request, "[")); socket.frame(json("type" to "session.event", "event" to event(5)))
+            socket.frame(json("type" to "response", "requestId" to request.getString("requestId"), "ok" to false, "message" to "History stalled")); runCurrent()
+            socket.frame(json("type" to "session.event", "event" to event(6))); runCurrent()
+            repo.openSession("s"); runCurrent(); val retry = historyRequest(socket)
+            assertEquals(0L, retry.getLong("afterSequence"))
+            assertTrue(repo.state.value.histories.getValue("s").events.isEmpty())
+            completeHistory(socket, retry, snapshot(retry, JSONArray().put(event(1)).put(event(5)).put(event(6)))); runCurrent()
+            assertEquals(listOf(1L, 5L, 6L), repo.state.value.histories.getValue("s").events.map { it.sequence })
+            assertNull(repo.state.value.histories.getValue("s").loadError)
+        } finally { repo.dispose() }
     }
 
     @Test fun localDeviceIdentityPrecedesPresenceSurvivesReconnectAndResetsWithTheService() = runTest {
@@ -284,7 +530,7 @@ class ProtocolTest {
         try {
             repo.connectService("wss://example.test/ws","local-service-test-credential")
             val s = t.sockets.single(); ready(s); runCurrent()
-            assertEquals("auth",s.sent[0].getString("type")); assertEquals(25,s.sent[0].getInt("protocolVersion")); assertFalse(s.sent[0].getBoolean("tunnel"))
+            assertEquals("auth",s.sent[0].getString("type")); assertEquals(26,s.sent[0].getInt("protocolVersion")); assertFalse(s.sent[0].getBoolean("tunnel"))
             assertEquals("android-device",s.sent[1].getString("id"))
             assertEquals(2,s.sent.size)
             assertEquals("online",repo.state.value.status)
@@ -353,7 +599,7 @@ class ProtocolTest {
             val rows = JSONArray().put(deviceSession("s", "server", true)).put(deviceSession("s2", "server", true))
                 .put(deviceSession("remote", "pc")).put(deviceSession("offline", "offline"))
                 .put(deviceSession("phone", "android-device"))
-            socket.frame(json("type" to "ready", "protocolVersion" to 25, "sessions" to rows)); runCurrent()
+            socket.frame(json("type" to "ready", "protocolVersion" to 26, "sessions" to rows)); runCurrent()
             assertEquals(listOf("s"), socket.sent.filter { it.optString("type") == "session.status" }.map { it.getString("sessionId") })
             val presence = json("type" to "devices", "devices" to JSONArray()
                 .put(json("id" to "server", "server" to true, "ready" to true))
@@ -380,7 +626,7 @@ class ProtocolTest {
         val t = FakeTransport(); val repo = WorkbenchRepository(t, StandardTestDispatcher(testScheduler))
         try {
             repo.connectService("wss://example.test/ws", serviceCredential); val socket = t.sockets.single()
-            socket.frame(json("type" to "ready", "protocolVersion" to 25, "sessions" to JSONArray()))
+            socket.frame(json("type" to "ready", "protocolVersion" to 26, "sessions" to JSONArray()))
             socket.frame(json("type" to "devices", "devices" to JSONArray().put(json("id" to "server", "server" to true, "ready" to true)))); runCurrent()
             assertFalse(socket.sent.any { it.optString("type") in setOf("server.session.create", "session.status") })
             val busy = session().put("activeRun", json("id" to "busy", "status" to "running"))
@@ -395,7 +641,7 @@ class ProtocolTest {
         val t = FakeTransport(); val repo = WorkbenchRepository(t, StandardTestDispatcher(testScheduler))
         try {
             repo.connectService("wss://example.test/ws", serviceCredential); val socket = t.sockets.single()
-            socket.frame(json("type" to "ready", "protocolVersion" to 25, "sessions" to JSONArray().put(session()).put(session("s2"))))
+            socket.frame(json("type" to "ready", "protocolVersion" to 26, "sessions" to JSONArray().put(session()).put(session("s2"))))
             socket.frame(json("type" to "devices", "devices" to JSONArray().put(json("id" to "server", "server" to true)))); runCurrent()
             val read = socket.sent.single { it.optString("type") == "session.status" }
             val duplicate = async { repo.loadModelCatalog("s2") }; runCurrent()
@@ -635,10 +881,10 @@ class ProtocolTest {
     }
     @Test fun malformedReadyMarkersAndCoercedProtocolVersionsAreRejectedBeforeDeviceIdentity() = runTest {
         val invalid = listOf(
-            json("protocolVersion" to "25"), json("protocolVersion" to 25.5),
-            json("protocolVersion" to 25,"browser" to true),
-            json("protocolVersion" to 25,"browser" to "browser"),
-            json("protocolVersion" to 25,"browser" to JSONObject())
+            json("protocolVersion" to "26"), json("protocolVersion" to 26.5), json("protocolVersion" to 25),
+            json("protocolVersion" to 26,"browser" to true),
+            json("protocolVersion" to 26,"browser" to "browser"),
+            json("protocolVersion" to 26,"browser" to JSONObject())
         )
         for (fields in invalid) {
             val t = FakeTransport(); val repo = WorkbenchRepository(t,StandardTestDispatcher(testScheduler))
@@ -656,7 +902,7 @@ class ProtocolTest {
         try {
             repo.connectService("wss://example.test/ws","instrumentation-only-service-token")
             val socket = t.sockets.single(); socket.observer.opened()
-            socket.frame(json("type" to "ready","protocolVersion" to 25,"browser" to false,"sessions" to JSONArray()))
+            socket.frame(json("type" to "ready","protocolVersion" to 26,"browser" to false,"sessions" to JSONArray()))
             runCurrent(); assertEquals("online",repo.state.value.status); assertTrue(socket.sent.any { it.optString("type") == "device" })
         } finally { repo.dispose() }
     }

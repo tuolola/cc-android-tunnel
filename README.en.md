@@ -13,11 +13,11 @@
 <p>
   <strong>A native Android client for your CC workbench</strong><br />
   Connect to your workbench, follow conversations and tools, and manage sessions from Android.<br />
-  <sub>Kotlin · Jetpack Compose · Workbench protocol 25</sub>
+  <sub>Kotlin · Jetpack Compose · Workbench protocol 26</sub>
 </p>
 
 <p>
-  <a href="https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.4-native/CCtunnel.apk"><img src="https://img.shields.io/badge/APK-1.0.4--native-16a34a?style=for-the-badge" alt="Download the CCtunnel 1.0.4-native public preview APK" /></a>
+  <a href="https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.5-native/CCtunnel.apk"><img src="https://img.shields.io/badge/APK-1.0.5--native-16a34a?style=for-the-badge" alt="Download the CCtunnel 1.0.5-native public preview APK" /></a>
   <a href="#quick-start"><img src="https://img.shields.io/badge/Setup-VPS%20to%20Android-2563eb?style=for-the-badge" alt="Set up the server, desktop and phone" /></a>
   <a href="#verification"><img src="https://img.shields.io/badge/Verification-Tests%20%26%20Audit-0f766e?style=for-the-badge" alt="Tests and audit" /></a>
   <a href="https://github.com/sun168567/cc-desk-tunnel"><img src="https://img.shields.io/badge/Origin-cc--desk--tunnel-475569?style=for-the-badge" alt="Upstream project" /></a>
@@ -25,19 +25,21 @@
 </p>
 
 <p>
-  <img src="https://img.shields.io/badge/Version-1.0.4--native-2563eb?style=flat-square" alt="Version 1.0.4-native" />
+  <img src="https://img.shields.io/badge/Preview-1.0.5--native-2563eb?style=flat-square" alt="Preview 1.0.5-native" />
   <img src="https://img.shields.io/badge/Kotlin-2.2.10-7f52ff?style=flat-square" alt="Kotlin 2.2.10" />
   <img src="https://img.shields.io/badge/UI-Jetpack%20Compose-4285f4?style=flat-square" alt="Jetpack Compose" />
   <img src="https://img.shields.io/badge/Android-7.0%2B-3ddc84?style=flat-square" alt="Android 7.0 and later" />
   <img src="https://img.shields.io/badge/Target%20SDK-36-475569?style=flat-square" alt="Target SDK 36" />
-  <img src="https://img.shields.io/badge/Protocol-25-c76649?style=flat-square" alt="Workbench protocol 25" />
+  <img src="https://img.shields.io/badge/Protocol-26-c76649?style=flat-square" alt="Workbench protocol 26" />
 </p>
 
 > Connect to and operate your workbench on Android with Kotlin and Jetpack Compose.
 
 </div>
 
-**1.0.4-native compatibility note (versionCode 10):** This version supports only direct WSS service connections. HTTPS workbench login and the connection-mode switch have been removed. Old HTTPS addresses are not converted automatically: enter the complete WSS service address and credential supplied by your administrator. Existing WSS connections retain the credentials and certificate fingerprints saved for their addresses.
+**1.0.5-native protocol compatibility (versionCode 11):** this version uses **protocol 26** and requires the upstream **v0.3.15 server**, with a matching desktop client. The older public [v1.0.4-native](https://github.com/tuolola/cc-android-tunnel/releases/tag/v1.0.4-native) uses **protocol 25 / upstream v0.3.14**; these protocols are not interchangeable. See the [protocol contract, compatibility and verification record (Chinese)](./docs/protocol-26.md).
+
+**Public 1.0.4-native compatibility note (versionCode 10):** This version supports only direct WSS service connections. HTTPS workbench login and the connection-mode switch have been removed. Old HTTPS addresses are not converted automatically: enter the complete WSS service address and credential supplied by your administrator. Existing WSS connections retain the credentials and certificate fingerprints saved for their addresses.
 
 First, a big thank-you to [sun168567](https://github.com/sun168567) and everyone contributing to [cc-desk-tunnel](https://github.com/sun168567/cc-desk-tunnel) for building something so useful and sharing it as open source. This Android version builds on their work, with a simple aim: let you pick up your phone and keep going when you're away from your computer. If you find it useful, consider giving the upstream project a star and showing its creators some support!
 
@@ -67,13 +69,13 @@ flowchart LR
 
 To work on a **computer project**, create its session in the desktop client, then open it under the corresponding computer in the phone sidebar's **远程控制** (Remote control) page. The computer must remain powered on, online and connected through the desktop client. The phone can use a different network. An ordinary session **created directly on the phone runs in the server container**; it does not automatically use the computer's project or upload phone files.
 
-Upstream supplies the server and desktop execution channel; this repository supplies the native Android interface. VPS hosting and model usage are separate costs. See the [upstream architecture](https://github.com/sun168567/cc-desk-tunnel/blob/v0.3.14/docs/architecture.md).
+Upstream supplies the server and desktop execution channel; this repository supplies the native Android interface. VPS hosting and model usage are separate costs. See the [upstream architecture](https://github.com/sun168567/cc-desk-tunnel/blob/v0.3.15/docs/architecture.md).
 
 This repository contains a standalone Android project. Its UI, networking, Markdown and code rendering run natively, without React Native, Expo, Hermes, Metro, a JavaScript business runtime or a WebView-hosted interface. Building and running the client does not require Node.js.
 
 See [verification](#verification) for the checked scope, test commands and scenarios awaiting validation.
 
-You need an accessible **protocol 25 workbench service** and its authentication details. This repository supplies the Android client, not the workbench server or model service. The app currently uses a Chinese interface.
+You need an accessible workbench service and its authentication details: **v1.0.5-native requires protocol 26 / upstream v0.3.15; older v1.0.4-native requires protocol 25 / upstream v0.3.14**. This repository supplies the Android client, not the workbench server or model service. The app currently uses a Chinese interface.
 
 ## Historical App Screenshots
 
@@ -116,13 +118,13 @@ The table describes the native implementation. Server capabilities and permissio
 | Android behavior | Light/dark themes, native multiline editor, keyboard avoidance, scrolling, gestures, disabled and read-only states |
 | Recovery and local state | Retain loaded history during temporary disconnection, recover by durable event cursor, persist service-scoped preferences and protect credentials with Android Keystore |
 
-**App updates (starting with `1.0.2-native`)**: open settings from the sidebar's bottom avatar for manual checks, automatic foreground checks and a prerelease toggle. Automatic checks wait 24 hours after success or one hour after failure. Downloads open in the system browser for user installation. Older `v1.0.1-native` installations do not include this feature; download and install the current `v1.0.4-native` version manually first. See [App updates and release maintenance (Chinese)](./docs/app-updates.md).
+**App updates (starting with `1.0.2-native`)**: open settings from the sidebar's bottom avatar for manual checks, automatic foreground checks and a prerelease toggle. Automatic checks wait 24 hours after success or one hour after failure. Downloads open in the system browser for user installation. Older `v1.0.1-native` installations do not include this feature; download and install the current `v1.0.5-native` version manually first. See [App updates and release maintenance (Chinese)](./docs/app-updates.md).
 
 ## Quick Start
 
 This walkthrough uses an **Ubuntu 24.04 LTS x86_64 VPS, Windows 10/11 x64 computer and Android 7.0+ phone**. Already have a working server and connected desktop? Start with step 6. A more detailed [Chinese walkthrough](./README.md#快速开始) includes per-step success checks.
 
-**Compatibility checked November 14, 2026:** the example pins the upstream server and desktop to [v0.3.14](https://github.com/sun168567/cc-desk-tunnel/releases/tag/v0.3.14), which uses protocol **25**. This app's `1.0.x-native` version is independent. Keep upstream desktop/server versions aligned, and check protocol compatibility before upgrading; a future latest release is not automatically compatible.
+**Version baseline (official assets and installer checked November 16, 2026):** this walkthrough uses upstream [v0.3.15](https://github.com/sun168567/cc-desk-tunnel/releases/tag/v0.3.15) / **protocol 26**, paired with **v1.0.5-native**. Older public v1.0.4-native uses upstream v0.3.14 / protocol 25; see the [compatibility notes (Chinese)](./docs/protocol-26.md). Android has an independent `1.0.x-native` version. Keep the upstream desktop/server versions aligned and follow upstream upgrade instructions for existing deployments. Checking the documentation does not mean your VPS has been upgraded or validated.
 
 ### 1. Get a VPS and prepare your devices
 
@@ -168,12 +170,12 @@ Continue when the daemon and Compose report versions and the test container exit
 
 ### 3. Deploy the upstream server
 
-On the VPS, use the [upstream deployment manual](https://github.com/sun168567/cc-desk-tunnel/blob/v0.3.14/deploy/README.md) and the pinned official installer:
+On the VPS, use the [upstream deployment manual](https://github.com/sun168567/cc-desk-tunnel/blob/v0.3.15/deploy/README.md) and the pinned official installer:
 
 ```bash
-curl -fL https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/v0.3.14/deploy/install.sh -o cc-desk-install.sh
+curl -fL https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/v0.3.15/deploy/install.sh -o cc-desk-install.sh
 less cc-desk-install.sh
-sudo env CC_DESK_TUNNEL_VERSION=0.3.14 bash cc-desk-install.sh
+sudo env CC_DESK_TUNNEL_VERSION=0.3.15 bash cc-desk-install.sh
 ```
 
 Press `q` to leave `less` before running the last command. These are new-deployment instructions; do not downgrade an existing installation just to match the example.
@@ -182,7 +184,7 @@ In the wizard, confirm your public IP, select self-signed TLS for this direct-IP
 
 Save the final **WSS address**, **SHA-256 leaf-certificate fingerprint** and **service credential**. Example address: `wss://203.0.113.10:8787/ws`; replace the documentation IP with yours. Obtain the fingerprint from your own trusted SSH session.
 
-Allow **8787/TCP** through the provider's security group and check the host firewall. Retain the SSH port used for administration. Do not open every port, the obsolete port 7000, or inbound Windows ports. Docker-published ports may bypass UFW; see [upstream security boundaries](https://github.com/sun168567/cc-desk-tunnel/blob/v0.3.14/docs/deployment.md). In nginx mode expose 443 instead and retain a loopback-only backend.
+Allow **8787/TCP** through the provider's security group and check the host firewall. Retain the SSH port used for administration. Do not open every port, the obsolete port 7000, or inbound Windows ports. Docker-published ports may bypass UFW; see [upstream security boundaries](https://github.com/sun168567/cc-desk-tunnel/blob/v0.3.15/docs/deployment.md). In nginx mode expose 443 instead and retain a loopback-only backend.
 
 ```bash
 sudo cc-desk-tunnel status
@@ -195,16 +197,16 @@ Continue when the service is running and you have all three connection values. `
 
 On your project computer:
 
-1. Download `CC-Desk-Tunnel-Setup-0.3.14-x64.exe` and `SHA256SUMS` from the [upstream v0.3.14 release](https://github.com/sun168567/cc-desk-tunnel/releases/tag/v0.3.14).
-2. Compare `Get-FileHash .\CC-Desk-Tunnel-Setup-0.3.14-x64.exe -Algorithm SHA256` with that release's checksum list, then install. The Windows installer includes PowerShell 7 and OpenSSH; see the [upstream desktop guide](https://github.com/sun168567/cc-desk-tunnel/tree/v0.3.14#图形客户端).
+1. Download `CC-Desk-Tunnel-Setup-0.3.15-x64.exe` and `SHA256SUMS` from the [upstream v0.3.15 release](https://github.com/sun168567/cc-desk-tunnel/releases/tag/v0.3.15).
+2. Compare `Get-FileHash .\CC-Desk-Tunnel-Setup-0.3.15-x64.exe -Algorithm SHA256` with that release's checksum list, then install. The Windows installer includes PowerShell 7 and OpenSSH; see the [upstream desktop guide](https://github.com/sun168567/cc-desk-tunnel/tree/v0.3.15#图形客户端).
 3. Enter the server's WSS address, verified certificate fingerprint and service credential. For a publicly trusted CA certificate, normally leave the fingerprint empty.
 4. Wait until the workbench is connected and the computer's execution channel is ready. Windows connects outbound; router port forwarding is unnecessary.
 
 ### 5. Configure model access and create a computer session
 
-Use the desktop account page to complete your own supported official Claude login, following [upstream's account instructions](https://github.com/sun168567/cc-desk-tunnel/tree/v0.3.14#3-登录-claude). The account needs permission and available quota; credentials are stored on the server.
+Use the desktop account page to complete your own supported official Claude login, following [upstream's account instructions](https://github.com/sun168567/cc-desk-tunnel/tree/v0.3.15#3-登录-claude). The account needs permission and available quota; credentials are stored on the server.
 
-Alternatively, for API-based access, configure the provider-supported environment settings in `<DATA_DIRECTORY>/config/provider.json` on the VPS, following [upstream model configuration](https://github.com/sun168567/cc-desk-tunnel/blob/v0.3.14/deploy/README.md#模型与可写空间). The default is `/srv/cc-desk-tunnel/config/provider.json`. Preserve valid JSON, run `sudo cc-desk-tunnel restart` on the VPS, and verify model/account status in the desktop client. Do not enter a model API key in the phone's service-credential field.
+Alternatively, for API-based access, configure the provider-supported environment settings in `<DATA_DIRECTORY>/config/provider.json` on the VPS, following [upstream model configuration](https://github.com/sun168567/cc-desk-tunnel/blob/v0.3.15/deploy/README.md#模型与可写空间). The default is `/srv/cc-desk-tunnel/config/provider.json`. Preserve valid JSON, run `sudo cc-desk-tunnel restart` on the VPS, and verify model/account status in the desktop client. Do not enter a model API key in the phone's service-credential field.
 
 In the desktop client, add a test project such as `D:\Projects\hello-tunnel`, create a session named `Mobile check`, and ask: `List the files in the current project root and report the working directory. Do not modify files.` Verify that the directory and files belong to this Windows computer.
 
@@ -212,14 +214,14 @@ Keep the three credentials separate: **SSH key/password** manages the VPS; **ser
 
 ### 6. Install CCtunnel on Android
 
-Download [CCtunnel.apk (v1.0.4-native)](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.4-native/CCtunnel.apk) for **Android 7.0 or newer**. This is a **Debug-signed public preview** (versionCode 10). Read the [release notes](https://github.com/tuolola/cc-android-tunnel/releases/tag/v1.0.4-native) and download the [SHA256SUMS.txt checksum list](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.4-native/SHA256SUMS.txt).
+Download [CCtunnel.apk (v1.0.5-native)](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.5-native/CCtunnel.apk) for **Android 7.0 or newer**. This is a **Debug-signed public preview** (versionCode 11). Read the [release notes](https://github.com/tuolola/cc-android-tunnel/releases/tag/v1.0.5-native) and download the [SHA256SUMS.txt checksum list](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.5-native/SHA256SUMS.txt).
 
 Verify the SHA-256 checksum, then transfer the APK to the phone and install it. With USB debugging enabled, you can alternatively run `adb install -r .\CCtunnel.apk` from the APK's directory on the development computer. Updating an existing installation requires the same package name and signing key, with a version Android permits as an update. Open **CCtunnel** and its connection screen. The phone does not need Node, Docker or Android Studio.
 
-The `1.0.4-native` APK is **13,612,525 bytes**. Verify its SHA-256 against the release's `SHA256SUMS.txt`:
+The `1.0.5-native` APK is **14,522,782 bytes**. Verify its SHA-256 against the release's `SHA256SUMS.txt`:
 
 ```text
-88a7da5ecb501859c90d8c060e4209866348a1b3742c88191a1232fb17481051
+13646f48395fe0b7303ce087bdcbcce47a3b80567c5da21f40745e8cc96e2bf2
 ```
 
 Upgrade from `v1.0.1-native` by downloading this version manually; the older version has no app-update entry point. The signing certificate is unchanged, so uninstalling the old version first is unnecessary.
@@ -265,9 +267,9 @@ A server-only session does not need the Windows computer online, but the server 
 | History loads but computer commands fail | Computer awake and online, desktop execution channel ready, correct session ownership |
 | New phone session cannot find a Windows path | It is a server session; create the project session on the desktop and open it on the phone |
 | Connected but model requests fail | Model login, quota, provider configuration and outbound server connectivity |
-| Version mismatch | App protocol 25 compatibility; do not upgrade or downgrade blindly |
+| Version mismatch | v1.0.5-native uses protocol 26 / upstream v0.3.15; older public v1.0.4-native uses protocol 25. Check the installed build and matching upstream version; see [compatibility notes (Chinese)](./docs/protocol-26.md) |
 
-On the VPS use `sudo cc-desk-tunnel status`, `sudo cc-desk-tunnel logs` and `sudo cc-desk-tunnel summary`. Before upgrades or certificate changes, stop active work, back up and follow [upstream maintenance](https://github.com/sun168567/cc-desk-tunnel/blob/v0.3.14/deploy/README.md#运维). Backups contain secrets and history. Android APK updates are independent of upstream desktop/server updates.
+On the VPS use `sudo cc-desk-tunnel status`, `sudo cc-desk-tunnel logs` and `sudo cc-desk-tunnel summary`. Before upgrades or certificate changes, stop active work, back up and follow [upstream maintenance](https://github.com/sun168567/cc-desk-tunnel/blob/v0.3.15/deploy/README.md#运维). Backups contain secrets and history. Android APK updates are independent of upstream desktop/server updates.
 
 ## Build the Android App
 
@@ -310,6 +312,8 @@ After installation, return to step 7 above. No service URL, password or token is
 
 ## Verification
 
+The protocol 26 adaptation in 1.0.5-native has a separate [verification record (Chinese)](./docs/protocol-26.md#本轮验证). The historical results below do not establish acceptance of this adaptation.
+
 ### Run the checks
 
 ```powershell
@@ -325,7 +329,17 @@ Use `scripts/measure-performance.ps1` with the [performance testing guide (Chine
 
 [The native build guard](./gradle/native-boundary.gradle.kts) checks production sources and resolved runtime dependencies. APK assembly also checks DEX references, packaged assets and native libraries for excluded JavaScript engines and WebView rendering. [The Python audit](./scripts/audit-native-apk.py) provides a separate check. The guard permits AndroidX's static `WebView.findAddress` compatibility reference; constructing or rendering a WebView remains rejected.
 
-### 1.0.4-native verification for this run — 2026-11-15
+### 1.0.5-native protocol 26 and warm theme — 2026-11-16
+
+This version retains the familiar composer and sidebar forms, with warm ivory, charcoal and terracotta colors across light/dark pages and overlays. Protocol 26 support handles history chunks, acknowledgments, cancellation and recovery after incomplete reads.
+
+This build passed **92 JVM tests (0 failures)**, Android Lint (**0 errors, 40 warnings**), production-source/APK native-boundary audits and **8 APK audit regression tests**. The Debug APK is `1.0.5-native` / versionCode 11 and retains the existing signing certificate.
+
+Final physical-device verification: **7 TLS tests passed on the physical phone: 5 NativeTlsIntegrationTest cases and 2 protocol 26 chunked-history cases**. Final UI and interaction checks: 25 physical-device interaction tests passed (sidebar 2, streaming/scrolling 3, chat 7, native composer 7, gestures 6), covering 30/60/65-row local expansion and search, IME/large-text input, model and approval controls, scrolling, reversed drags and exit blocking. Visual tests passed for 14 states in each light/dark theme. Manual review of chat and sidebar captures in both themes confirmed the restored pill composer, circular send button and simple full-width selected row, without observed clipping or leftover styling. The read-only check of the configured real service returned `protocolMismatch`: that VPS must first be aligned with upstream v0.3.15 / protocol 26 before live integration can proceed. History, pagination and recovery on that VPS have not passed validation, and this run did not upgrade the service. Protocol 26 local TLS fixtures are separate evidence; see the [protocol verification record (Chinese)](./docs/protocol-26.md#本轮验证).
+
+The installed phone app was verified as `1.0.5-native` / versionCode 11; its `base.apk` SHA-256 matches the delivered APK above. Dark captures use a local test theme while the system stays light; status-bar behavior under actual system-theme changes was not separately validated. Anonymous asset-download verification and the older-app update/install path remain unverified and will be recorded separately after publication.
+
+### 1.0.4-native historical verification — 2026-11-15
 
 The final `1.0.4-native` / versionCode 10 Debug APK and instrumentation APK built successfully, retaining the previous Debug signing certificate. This build passed **79 JVM tests**, Android Lint, source/APK native-boundary audits and **8 audit regression tests**.
 

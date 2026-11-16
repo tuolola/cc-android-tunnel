@@ -1,7 +1,16 @@
 package dev.ccdesk.nativeapp.ui
 
 import android.graphics.Bitmap
+import android.content.res.Configuration
+import android.view.ContextThemeWrapper
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.platform.app.InstrumentationRegistry
@@ -9,6 +18,7 @@ import dev.ccdesk.nativeapp.core.*
 import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import java.io.File
@@ -35,7 +45,7 @@ class VisualReferenceTest {
                 .put(json("id" to "server", "name" to "工作台", "server" to true, "ready" to true))
                 .put(json("id" to "desktop-1", "name" to "工作电脑", "ready" to true))))
             runBlocking { repo.selectSession("session-1") }
-            compose.setContent { WorkbenchApp(repo, route.value) { route.value = null } }
+            compose.setContent { ReviewEnvironment { WorkbenchApp(repo, route.value) { route.value = null } } }
             compose.onNodeWithContentDescription("给 Claude 发消息…").assertIsDisplayed()
             shot("01-chat")
             compose.onNodeWithContentDescription("会话菜单").performClick()
@@ -81,14 +91,95 @@ class VisualReferenceTest {
         } finally { compose.runOnIdle { repo.dispose() } }
     }
 
+    @Test fun longContentEmptySearchAndOfflineHistoryRemainUsableWithoutWrites() {
+        val title = "离线电脑上的超长会话标题：检查聊天布局、模型菜单和项目操作是否仍然清晰可用"
+        val peer = FixtureTransport(json("id" to "offline-computer", "name" to "外出时保留历史的工作电脑"))
+        peer.sessions.clear()
+        peer.sessions += peer.session("session-1", title)
+        // Match the fixture's offline device explicitly; the title must stay available
+        // to accessibility even if its visible label ellipsizes on a narrow display.
+        peer.sessions[0].put("device", json("id" to "offline-computer", "name" to "外出时保留历史的工作电脑"))
+        peer.events = JSONArray()
+            .put(event(1, "message.user", "请检查这一段较长的消息在窄屏与大字体下的换行。".repeat(9)))
+            .put(event(2, "text.delta", "这是保存在离线电脑会话中的历史内容。\n\n" + (1..18).joinToString("\n\n") { "$it. 保留完整正文与段落间距，滚动时仍可打开菜单和回到最新消息。" }))
+            .put(json("sessionId" to "session-1", "runId" to "review-run", "sequence" to 3,
+                "createdAt" to "2026-11-15T08:00:00Z", "payload" to json("type" to "run.status", "status" to "completed")))
+        val repo = WorkbenchRepository(peer)
+        try {
+            runBlocking { repo.start() }
+            compose.waitUntil(5_000) { repo.state.value.status == "online" }
+            compose.setContent { ReviewEnvironment { WorkbenchApp(repo, requestedRoute = "remote") } }
+            compose.onNodeWithTag("remote-device:offline-computer").assertIsDisplayed()
+            compose.onNodeWithContentDescription("打开会话：$title").assertIsDisplayed()
+            shot("edge-offline-long-title")
+            compose.onNodeWithContentDescription("打开会话：$title").performClick()
+            compose.waitUntil(5_000) { repo.state.value.histories["session-1"]?.loaded == true }
+            compose.onNodeWithContentDescription("只读会话").assertIsNotEnabled()
+            compose.onNodeWithContentDescription("会话菜单").assertIsDisplayed().performClick()
+            compose.onNodeWithContentDescription("刷新会话").assertIsNotEnabled()
+            shot("edge-offline-menu")
+            compose.onNodeWithContentDescription("关闭菜单").performClick()
+            // A real drag enters reader mode; an instantaneous semantics jump does
+            // not provide isScrollInProgress and can be corrected by follow-at-end.
+            compose.onNode(hasScrollToIndexAction()).performTouchInput {
+                swipeDown(startY = height * .2f, endY = height * .8f, durationMillis = 700)
+            }
+            compose.waitForIdle()
+            shot("edge-long-transcript")
+            compose.onNodeWithContentDescription("回到最新消息").assertIsDisplayed().performClick()
+            shot("edge-transcript-latest")
+            compose.onNodeWithContentDescription("打开导航").performClick()
+            compose.onNodeWithContentDescription("搜索会话").performClick()
+            val requestsBeforeSearch = peer.sent.map { it.toString() }
+            compose.onNodeWithContentDescription("搜索会话内容").performTextInput("no-match-fixture")
+            compose.onNodeWithText("没有匹配的会话").assertIsDisplayed()
+            shot("edge-empty-search")
+            assertEquals("Sidebar search must stay local", requestsBeforeSearch, peer.sent.map { it.toString() })
+            assertFalse(peer.sent.any { it.optString("type") in setOf("message.send", "session.configure", "server.session.create", "session.delete") })
+        } finally { compose.runOnIdle { repo.dispose() } }
+    }
+
+    /**
+     * Run with -e reviewTheme dark -e reviewFontScale 1.4. Configuration is scoped
+     * to this composition, including native TextViews; device settings stay intact.
+     */
+    @Composable private fun ReviewEnvironment(content: @Composable () -> Unit) {
+        val args = InstrumentationRegistry.getArguments()
+        val baseConfiguration = LocalConfiguration.current
+        val baseContext = LocalContext.current
+        val baseDensity = LocalDensity.current
+        val theme = args.getString("reviewTheme")
+        val scale = args.getString("reviewFontScale")?.toFloatOrNull()?.coerceIn(1f, 2f) ?: baseConfiguration.fontScale
+        val configuration = remember(baseConfiguration, theme, scale) {
+            Configuration(baseConfiguration).apply {
+                fontScale = scale
+                if (theme == "dark" || theme == "light") {
+                    uiMode = (uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or
+                        if (theme == "dark") Configuration.UI_MODE_NIGHT_YES else Configuration.UI_MODE_NIGHT_NO
+                }
+            }
+        }
+        val context = remember(baseContext, configuration) {
+            ContextThemeWrapper(baseContext, dev.ccdesk.nativeapp.R.style.AppTheme).apply { applyOverrideConfiguration(configuration) }
+        }
+        CompositionLocalProvider(LocalConfiguration provides configuration, LocalContext provides context,
+            LocalDensity provides Density(baseDensity.density, scale), content = content)
+    }
+
+    private fun outputFolder(): File {
+        val args = InstrumentationRegistry.getArguments()
+        val variant = args.getString("reviewVariant")?.takeIf { it.matches(Regex("[a-zA-Z0-9_-]{1,40}")) }
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        return File(requireNotNull(context.getExternalFilesDir(null)), if (variant == null) "ui-review" else "ui-review-$variant")
+    }
+
     private fun event(sequence: Int, type: String, text: String, sessionId: String = "session-1") = json(
         "sessionId" to sessionId, "runId" to "review-run", "sequence" to sequence,
         "createdAt" to "2026-11-15T08:00:00Z", "payload" to json("type" to type, "messageId" to "review-$sequence", "text" to text))
 
     /** This directory belongs to this screenshot test; remove its obsolete named captures. */
     private fun clearPreviousShots() {
-        val context = InstrumentationRegistry.getInstrumentation().targetContext
-        val folder = File(requireNotNull(context.getExternalFilesDir(null)), "ui-review")
+        val folder = outputFolder()
         val captureName = Regex("(?:[0-9]{2}-[a-z-]+|page-[a-z-]+)\\.png")
         folder.listFiles()?.filter { it.isFile && captureName.matches(it.name) }?.forEach {
             check(it.delete()) { "Could not replace visual reference ${it.name}" }
@@ -100,7 +191,7 @@ class VisualReferenceTest {
         // Semantics can be ready before SurfaceFlinger has presented the first frame.
         android.os.SystemClock.sleep(400)
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val folder = File(requireNotNull(instrumentation.targetContext.getExternalFilesDir(null)), "ui-review").apply { mkdirs() }
+        val folder = outputFolder().apply { mkdirs() }
         val bitmap = requireNotNull(instrumentation.uiAutomation.takeScreenshot())
         File(folder, "$name.png").outputStream().use { check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
         bitmap.recycle()

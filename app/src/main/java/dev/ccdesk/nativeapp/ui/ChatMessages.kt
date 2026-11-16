@@ -98,7 +98,21 @@ private val deliveryLabels=mapOf("queued" to "已排队","submitted" to "已提�
     val c=LocalDeskColors.current
     Column((if(current)modifier.fillMaxWidth().border(1.dp,c.foreground,RoundedCornerShape(12.dp)).background(c.muted,RoundedCornerShape(12.dp)).padding(9.dp)else modifier.fillMaxWidth()).onSizeChanged{onHeightChange()}){
         when(row.kind){
-            "user"->{BoxWithConstraints(Modifier.fillMaxWidth().padding(top=12.dp,bottom=20.dp)){val limit=maxWidth*.85f;Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.End){Box(Modifier.widthIn(max=limit).background(c.userBubble,RoundedCornerShape(24.dp)).padding(horizontal=16.dp,vertical=12.dp)){SelectionContainer{DeskText(row.content,size=16,lineHeight=24)}}}};if(row.delivery.isNotEmpty())DeskText(deliveryLabels[row.delivery]?:row.delivery,Modifier.align(Alignment.End).padding(bottom=8.dp),12,c.mutedForeground)}
+            "user"->{
+                BoxWithConstraints(Modifier.fillMaxWidth().padding(top=12.dp,bottom=20.dp)){
+                    val limit=maxWidth*.88f
+                    // The tighter trailing corner identifies the speaker without an avatar
+                    // or an extra label on every message. Long text retains a readable measure.
+                    val shape=RoundedCornerShape(topStart=20.dp,topEnd=20.dp,bottomEnd=6.dp,bottomStart=20.dp)
+                    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.End){
+                        Box(Modifier.widthIn(max=limit).background(c.userBubble,shape)
+                            .border(1.dp,c.primary.copy(alpha=.12f),shape).padding(horizontal=16.dp,vertical=12.dp)){
+                            SelectionContainer{DeskText(row.content,size=16,lineHeight=25)}
+                        }
+                    }
+                }
+                if(row.delivery.isNotEmpty())DeskText(deliveryLabels[row.delivery]?:row.delivery,Modifier.align(Alignment.End).padding(bottom=8.dp),12,c.mutedForeground)
+            }
             "reply"->{
                 NativeMarkdown(row.content.ifEmpty{"..."},Modifier.fillMaxWidth())
                 if(showActions&&actionText.isNotBlank())ReplyActions(actionText)
@@ -133,7 +147,7 @@ private val deliveryLabels=mapOf("queued" to "已排队","submitted" to "已提�
     Row(Modifier.offset(x=(-8).dp).padding(top=8.dp,bottom=20.dp),horizontalArrangement=Arrangement.spacedBy(0.dp),verticalAlignment=Alignment.CenterVertically){
         MessageCopyAction(text)
         MessageActionButton("share-2","分享回复"){share()}
-        // The popup's parent is exactly the 36 dp button, so it follows that button when
+        // The popup's parent is exactly the action button, so it follows that button when
         // the transcript scrolls, the IME changes the viewport, or the window is resized.
         Box{
             MessageActionButton("ellipsis-vertical","更多回复操作"){keyboard?.hide();menu=true}
@@ -205,7 +219,7 @@ internal class ReplyMenuPositionProvider(
     val margin=with(density){12.dp.roundToPx()}
     val gap=with(density){8.dp.roundToPx()}
     // A separate Popup window clips drawing at its own bounds even when its
-    // Compose layers do not clip. Reserve room for the 24 dp elevation's halo.
+    // Compose layers do not clip. Retain generous room for the animated shadow halo.
     val shadowPadding=48.dp
     val shadowInset=with(density){shadowPadding.roundToPx()}
     var origin by remember{mutableStateOf(TransformOrigin.Center)}
@@ -234,8 +248,8 @@ internal class ReplyMenuPositionProvider(
             }
         }.padding(shadowPadding)){
             DeskFloatingVisibility(transition,initialScale=.92f,targetScale=.96f,transformOrigin=origin){
-                val shape=RoundedCornerShape(24.dp)
-                Column(Modifier.width(minOf(216.dp,maximumWidth)).heightIn(max=maximumHeight).deskFloatingSurface(shape,24.dp).clip(shape)
+                val shape=RoundedCornerShape(20.dp)
+                Column(Modifier.width(minOf(224.dp,maximumWidth)).heightIn(max=maximumHeight).deskFloatingSurface(shape,12.dp).border(1.dp,LocalDeskColors.current.border,shape).clip(shape)
                     .testTag("reply-actions-popup").then(if(visible)AbsorbPointerInput else BlockPointerInput.clearAndSetSemantics{})
                     .verticalScroll(rememberScrollState()).padding(vertical=8.dp),content=content)
             }
@@ -253,11 +267,11 @@ internal class ReplyMenuPositionProvider(
     }
 }
 
-/** 36 dp visual spacing matches the reference while Compose preserves the minimum touch target. */
+/** Separate 44 dp targets keep adjacent copy/share/menu actions easy to distinguish by touch. */
 @Composable internal fun MessageActionButton(icon:String,label:String,onClick:()->Unit){
     val c=LocalDeskColors.current
     val interaction=remember{MutableInteractionSource()};val pressed by interaction.pressedState()
-    Box(Modifier.size(36.dp).pressScale(pressed,true,DeskMotion.IconPressScale).clip(RoundedCornerShape(18.dp)).background(animatedHighlight(pressed,false,c.muted)).clickable(interactionSource=interaction,indication=null,onClick=onClick).semantics{contentDescription=label;role=Role.Button},contentAlignment=Alignment.Center){
+    Box(Modifier.size(44.dp).pressScale(pressed,true,DeskMotion.IconPressScale).clip(RoundedCornerShape(12.dp)).background(animatedHighlight(pressed,false,c.accent)).clickable(interactionSource=interaction,indication=null,onClick=onClick).semantics{contentDescription=label;role=Role.Button},contentAlignment=Alignment.Center){
         DeskIcon(icon,size=20.dp,tint=c.mutedForeground,strokeWidth=1.8f)
     }
 }
@@ -274,7 +288,7 @@ internal class ReplyMenuPositionProvider(
     val label=if(tool.status.isNotEmpty())mapOf("completed" to "已完成","failed" to "失败","cancelled" to "已停止","unknown" to "状态未知","denied" to "已拒绝")[tool.status]?:tool.status else if(awaiting)if(tool.name=="AskUserQuestion")"等待回答"else "等待审批"else if(tool.allowed==false)"已拒绝"else if(active)"进行中"else "已结束"
     val open=awaiting||expanded||reveal
     val taskControls=tool.taskId.isNotEmpty()&&active&&tool.status.isEmpty()
-    Column(Modifier.fillMaxWidth().padding(vertical=8.dp).border(1.dp,c.border,RoundedCornerShape(24.dp)).background(c.card,RoundedCornerShape(24.dp)).padding(16.dp)){
+    Column(Modifier.fillMaxWidth().padding(vertical=8.dp).border(1.dp,if(awaiting)c.primary.copy(alpha=.5f)else c.border,RoundedCornerShape(16.dp)).background(c.card,RoundedCornerShape(16.dp)).padding(16.dp)){
         DisclosureHeader(open,tool.name+"详情",{expanded=!expanded},Modifier.fillMaxWidth()){
             DeskText(tool.name,Modifier.weight(1f),15,weight=FontWeight.Medium,lineHeight=22)
             AnimatedContent(label,transitionSpec={fadeIn(DeskMotion.fadeIn())togetherWith fadeOut(DeskMotion.fadeOut())},label="tool status"){DeskText(it,size=12,color=c.mutedForeground)}
@@ -310,8 +324,8 @@ fun questionsFrom(input:String):List<Question> = runCatching{val a=JSONObject(in
 @Composable private fun QuestionOption(label:String,description:String,selected:Boolean,multi:Boolean,enabled:Boolean,toggle:()->Unit){
     val c=LocalDeskColors.current
     val interaction=remember{MutableInteractionSource()};val pressed by interaction.pressedState()
-    val border by animateColorAsState(if(selected)c.foreground else c.border,DeskMotion.state(),label="option border")
-    val fill=animatedHighlight(pressed&&enabled,selected,c.muted,c.muted.copy(alpha=.6f))
+    val border by animateColorAsState(if(selected)c.primary else c.border,DeskMotion.state(),label="option border")
+    val fill=animatedHighlight(pressed&&enabled,selected,c.accent,c.accent)
     val mark by animateFloatAsState(if(selected)1f else 0f,DeskMotion.icon(),label="option check")
     val alpha=animatedEnabledAlpha(enabled,.6f)
     Column(Modifier.fillMaxWidth().pressScale(pressed,enabled,DeskMotion.CardPressScale).graphicsLayer{this.alpha=alpha}.clip(RoundedCornerShape(12.dp)).background(fill).border(1.dp,border,RoundedCornerShape(12.dp)).toggleable(value=selected,interactionSource=interaction,indication=null,enabled=enabled,role=if(multi)Role.Checkbox else Role.RadioButton,onValueChange={toggle()}).padding(13.dp)){

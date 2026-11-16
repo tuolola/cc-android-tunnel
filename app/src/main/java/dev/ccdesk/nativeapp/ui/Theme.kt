@@ -52,11 +52,17 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 
-data class DeskColors(val background:Color,val foreground:Color,val card:Color,val userBubble:Color,val muted:Color,val mutedForeground:Color,val border:Color,val secondary:Color,val accent:Color,val sidebar:Color,val dark:Boolean,val primary:Color=Color(0xff3566f0),val onPrimary:Color=Color.White)
-// Sampled from the reference device at 3 px/dp. Keep the paper, floating controls and
-// sidebar separate: their nearly-white surfaces are visibly different in the app.
-private val light=DeskColors(Color(0xfffcfcfc),Color(0xff0d0d0d),Color.White,Color(0xffedf3fe),Color(0xfff3f3f3),Color(0xff8f8f8f),Color(0xffdddddd),Color(0xfff4f4f4),Color(0xffe8e8e8),Color.White,false)
-private val dark=DeskColors(Color(0xff171717),Color(0xfff3f3f3),Color(0xff303030),Color(0xff27364d),Color(0xff292929),Color(0xffa3a3a3),Color(0xff424242),Color(0xff292929),Color(0xff393939),Color(0xff202020),true,Color(0xff6f96ff))
+data class DeskColors(val background:Color,val foreground:Color,val card:Color,val userBubble:Color,val muted:Color,val mutedForeground:Color,val border:Color,val secondary:Color,val accent:Color,val sidebar:Color,val dark:Boolean,val primary:Color=Color(0xffad563b),val onPrimary:Color=Color.White)
+// Claude-inspired warm paper, charcoal and terracotta; CCtunnel retains its own layout.
+// Deepen the light-mode accent for readable small labels (4.78:1 against warm paper).
+private val light=DeskColors(Color(0xfffaf9f5),Color(0xff262624),Color(0xfffffefa),Color(0xfff0eee6),Color(0xfff1efe7),Color(0xff6b6960),Color(0xffdedbd1),Color(0xfff1efe7),Color(0xfffaf3ec),Color(0xfff3f1e9),false)
+private val dark=DeskColors(Color(0xff262624),Color(0xfff1eee5),Color(0xff30302d),Color(0xff3c3832),Color(0xff353530),Color(0xffb9b6aa),Color(0xff4a4942),Color(0xff353530),Color(0xff493a31),Color(0xff21211f),true,Color(0xffe0a184),Color(0xff251b16))
+internal object DeskShape {
+    val Control=RoundedCornerShape(12.dp)
+    val Field=RoundedCornerShape(16.dp)
+    val Card=RoundedCornerShape(20.dp)
+    val Sheet=RoundedCornerShape(topStart=24.dp,topEnd=24.dp)
+}
 val LocalDeskColors=staticCompositionLocalOf { light }
 @Composable fun DeskTheme(content:@Composable ()->Unit) {
     val colors=if(isSystemInDarkTheme()) dark else light
@@ -74,21 +80,21 @@ val LocalDeskColors=staticCompositionLocalOf { light }
     val background by animateColorAsState(if(filled)(if(pressed)c.primary.copy(alpha=.86f)else c.primary)else if(pressed)c.accent else c.secondary,DeskMotion.highlight(pressed),label="action background")
     val textColor by animateColorAsState(if(filled)c.onPrimary else c.foreground,DeskMotion.state(),label="action text")
     val alpha=animatedEnabledAlpha(enabled||loading)
-    Box(modifier.pressScale(pressed,enabled&&!loading,if(selected)DeskMotion.ChipPressScale else DeskMotion.ButtonPressScale).graphicsLayer{this.alpha=alpha;compositingStrategy=CompositingStrategy.ModulateAlpha}.background(background,CircleShape).clickable(enabled=enabled&&!loading,interactionSource=interaction,indication=null,onClick=onClick).semantics{text=AnnotatedString(label);role=Role.Button;if(selected)this.selected=true}.padding(horizontal=18.dp,vertical=12.dp),contentAlignment=Alignment.Center) {
+    Box(modifier.heightIn(min=48.dp).pressScale(pressed,enabled&&!loading,if(selected)DeskMotion.ChipPressScale else DeskMotion.ButtonPressScale).graphicsLayer{this.alpha=alpha;compositingStrategy=CompositingStrategy.ModulateAlpha}.background(background,DeskShape.Control).clickable(enabled=enabled&&!loading,interactionSource=interaction,indication=null,onClick=onClick).semantics{text=AnnotatedString(label);role=Role.Button;if(selected)this.selected=true}.padding(horizontal=18.dp,vertical=12.dp),contentAlignment=Alignment.Center) {
         Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.Center){
             AnimatedVisibility(loading,enter=fadeIn(DeskMotion.fadeIn())+expandHorizontally(DeskMotion.layoutSize),exit=fadeOut(DeskMotion.fadeOut())+shrinkHorizontally(DeskMotion.layoutSize)){Box(Modifier.padding(end=8.dp)){DeskSpinner("正在处理",16.dp)}}
             NativeSpanText(label,size=14,lineHeight=20,color=textColor,weight=if(filled)600 else 500,selectable=false,exposeText=false)
         }
     }
 }
-/** White floating controls share a soft shadow while retaining a crisp circular edge. */
-internal fun Modifier.deskFloatingSurface(shape:Shape=CircleShape,elevation:Dp=18.dp)=composed {
+/** Quiet floating surfaces retain shaped shadows without competing with the content. */
+internal fun Modifier.deskFloatingSurface(shape:Shape=DeskShape.Control,elevation:Dp=3.dp)=composed {
     val colors=LocalDeskColors.current
     graphicsLayer {
         this.shape=shape
         shadowElevation=elevation.toPx()
         // Android applies its light-source opacity to these colors again. A very
-        // faint color here loses the broad gray halo around the reference controls.
+        // faint color here loses the soft halo needed to separate floating surfaces.
         ambientShadowColor=Color.Black.copy(alpha=if(colors.dark).8f else .7f)
         spotShadowColor=Color.Black.copy(alpha=if(colors.dark).5f else .35f)
     }.background(colors.card,shape)
@@ -96,7 +102,7 @@ internal fun Modifier.deskFloatingSurface(shape:Shape=CircleShape,elevation:Dp=1
 
 @Composable internal fun DeskSurfaceIconButton(
     name:String,label:String,modifier:Modifier=Modifier,enabled:Boolean=true,
-    size:Dp=44.dp,iconSize:Dp=24.dp,tint:Color=LocalDeskColors.current.foreground,
+    size:Dp=48.dp,iconSize:Dp=24.dp,tint:Color=LocalDeskColors.current.foreground,
     strokeWidth:Float=2f,onClick:()->Unit,
 ) {
     val c=LocalDeskColors.current
@@ -104,7 +110,7 @@ internal fun Modifier.deskFloatingSurface(shape:Shape=CircleShape,elevation:Dp=1
     val alpha=animatedEnabledAlpha(enabled,.4f)
     val highlight=animatedHighlight(pressed&&enabled,false,c.accent)
     Box(modifier.size(size).pressScale(pressed,enabled,DeskMotion.IconPressScale)
-        .floatingAlpha{alpha}.deskFloatingSurface().background(highlight,CircleShape)
+        .floatingAlpha{alpha}.deskFloatingSurface().border(1.dp,c.border,DeskShape.Control).background(highlight,DeskShape.Control)
         .clickable(enabled=enabled,interactionSource=interaction,indication=null,onClick=onClick)
         .semantics{contentDescription=label;role=Role.Button},contentAlignment=Alignment.Center) {
         DeskIcon(name,size=iconSize,tint=tint,strokeWidth=strokeWidth)

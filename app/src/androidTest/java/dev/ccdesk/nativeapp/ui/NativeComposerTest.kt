@@ -78,6 +78,36 @@ class NativeComposerTest {
         compose.runOnIdle{val view=nativeEditor();assertTrue("Tall input must scroll internally",view.scrollY>0);assertTrue(view.canScrollVertically(-1));assertEquals(text.length,view.length())}
     }
 
+    @Test fun emptyHintWrapsAtLargeFontScaleWithoutClippingAndKeepsTheHeightCap(){
+        val application=InstrumentationRegistry.getInstrumentation().targetContext
+        val config=Configuration(application.resources.configuration).apply{fontScale=1.4f}
+        val context=ContextThemeWrapper(application.createConfigurationContext(config),R.style.AppTheme)
+        val hint=mutableStateOf("给 Claude 发消息…")
+        var changes=0
+        compose.setContent{
+            CompositionLocalProvider(LocalContext provides context,LocalConfiguration provides config){
+                DeskTheme{NativeComposer("",{changes++},hint.value,true,Modifier.width(130.dp))}
+            }
+        }
+        compose.waitForIdle()
+        compose.runOnIdle{
+            val view=nativeEditor()
+            val maximum=(144*view.resources.displayMetrics.density).toInt()
+            assertTrue(view.text.isEmpty())
+            assertEquals(1.4f,view.resources.configuration.fontScale,.001f)
+            assertTrue("A narrow large-font hint needs room for at least two native lines",view.height>=view.lineHeight*2)
+            assertTrue("Wrapping hints retain the composer height cap",view.height<=maximum)
+            hint.value=(1..20).joinToString("\n"){"第 $it 行提示"}
+        }
+        compose.waitForIdle()
+        compose.runOnIdle{
+            val view=nativeEditor()
+            assertEquals((144*view.resources.displayMetrics.density).toInt(),view.height)
+            assertTrue(view.text.isEmpty())
+            assertEquals("Changing the placeholder must not edit the draft",0,changes)
+        }
+    }
+
     @Test fun unrelatedRecompositionPreservesSelectionAndImeComposingRegion(){
         val generation=mutableIntStateOf(0)
         compose.setContent{DeskTheme{var value by remember{mutableStateOf("first line\nsecond line")};Column{DeskText("Generation ${generation.intValue}");NativeComposer(value,{value=it},label,true,Modifier.width(300.dp))}}}
@@ -114,8 +144,8 @@ class NativeComposerTest {
             }
         }
         lateinit var original:EditText
-        val lightHint=0xff8f8f8f.toInt()
-        val darkHint=0xffa3a3a3.toInt()
+        val lightHint=0xff6b6960.toInt()
+        val darkHint=0xffb9b6aa.toInt()
         compose.runOnIdle{
             // The measured UI palette must update on the existing native editor.
             original=nativeEditor()
@@ -200,7 +230,7 @@ class NativeComposerTest {
 
         override suspend fun socket(endpoint:String,observer:SocketObserver):SocketConnection {
             fun frame(value:JSONObject){main.post{observer.message(value.toString())}}
-            main.post{observer.opened();frame(json("type" to "ready","protocolVersion" to 25,"sessions" to JSONArray().put(session())));frame(json("type" to "devices","devices" to JSONArray().put(json("id" to "server","server" to true,"ready" to true))))}
+            main.post{observer.opened();frame(json("type" to "ready","protocolVersion" to 26,"sessions" to JSONArray().put(session())));frame(json("type" to "devices","devices" to JSONArray().put(json("id" to "server","server" to true,"ready" to true))))}
             return object:SocketConnection{
                 override fun send(text:String):Boolean {val request=JSONObject(text);sent+=request;val id=request.optString("requestId");if(id.isNotEmpty()){if(request.optString("type")=="session.subscribe")frame(json("type" to "session.snapshot","requestId" to id,"session" to session(),"mode" to "replace","events" to JSONArray(),"hasEarlier" to false));frame(json("type" to "response","requestId" to id,"ok" to true))};return true}
                 override fun close(){}
