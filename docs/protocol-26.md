@@ -7,11 +7,12 @@
 | Android 构建 | 协议 | 对应上游服务端 | 状态 |
 | --- | --- | --- | --- |
 | GitHub 公开下载的 `v1.0.4-native` | 25 | `v0.3.14` | 已发布的公开测试 APK；原下载链接与校验值保持不变 |
+| `1.0.6-native` / versionCode 12 | 26 | `v0.3.15` | 待发布的公开测试构建；已覆盖安装并完成真实服务只读检查，见文末 |
 | `1.0.5-native` / versionCode 11 | 26 | `v0.3.15` | 已发布的公开测试版；[Release 与附件](https://github.com/tuolola/cc-android-tunnel/releases/tag/v1.0.5-native)，构建与验证见文末 |
 
-上游 v0.3.15 的桌面客户端、`ccdt` 和服务端需配套升级。Android 的 `1.0.x-native` 是独立版本号，不能仅凭名称判断协议兼容。服务端明确拒绝协议不匹配的连接并以 WebSocket `4002` 关闭；本次适配不意味着同时兼容协议 25，也不意味着现有服务器已升级。[发布说明](https://github.com/sun168567/cc-desk-tunnel/releases/tag/v0.3.15)、[服务端检查](https://github.com/sun168567/cc-desk-tunnel/blob/v0.3.15/apps/server/src/server.ts#L1834)
+上游 v0.3.15 的桌面客户端、`ccdt` 和服务端需配套升级。Android 的 `1.0.x-native` 是独立版本号，不能仅凭名称判断协议兼容。服务端明确拒绝协议不匹配的连接并以 WebSocket `4002` 关闭；本次适配不意味着同时兼容协议 25，Android APK 本身不会升级服务器。本次联调服务的实际升级与验证另见文末。[发布说明](https://github.com/sun168567/cc-desk-tunnel/releases/tag/v0.3.15)、[服务端检查](https://github.com/sun168567/cc-desk-tunnel/blob/v0.3.15/apps/server/src/server.ts#L1834)
 
-README 的部署教程现对应 `v1.0.5-native` 与上游 v0.3.15，已核对该 tag 的官方 Windows 安装包、服务端程序包与 `CC_DESK_TUNNEL_VERSION=0.3.15` 安装参数。旧公开 v1.0.4 的大小与 SHA-256 仅作为历史记录，不能用于协议 26 的新附件。[上游资产](https://github.com/sun168567/cc-desk-tunnel/releases/tag/v0.3.15)、[固定版本安装脚本](https://github.com/sun168567/cc-desk-tunnel/blob/v0.3.15/deploy/install.sh#L67)
+README 的部署教程现对应 `v1.0.6-native` 与上游 v0.3.15，已核对该 tag 的官方 Windows 安装包、服务端程序包与 `CC_DESK_TUNNEL_VERSION=0.3.15` 安装参数。旧公开 v1.0.4 的大小与 SHA-256 仅作为历史记录，不能用于协议 26 的新附件。[上游资产](https://github.com/sun168567/cc-desk-tunnel/releases/tag/v0.3.15)、[固定版本安装脚本](https://github.com/sun168567/cc-desk-tunnel/blob/v0.3.15/deploy/install.sh#L67)
 
 ## 历史分块格式
 
@@ -94,6 +95,33 @@ README 的部署教程现对应 `v1.0.5-native` 与上游 v0.3.15，已核对该
 `ready`、`session`、持久事件和 `historyPage` 的字段没有额外变化。现有设备身份过滤、手机/电脑会话归属、认证、权限和业务命令范围应保留；本轮不因上游新增能力而虚构手机操作入口。[协议完整差异](https://github.com/sun168567/cc-desk-tunnel/compare/v0.3.14...v0.3.15)、[新增账号字段](https://github.com/sun168567/cc-desk-tunnel/blob/v0.3.15/packages/protocol/src/index.ts#L78)、[升级参数](https://github.com/sun168567/cc-desk-tunnel/blob/v0.3.15/packages/protocol/src/index.ts#L633)
 
 ## 本轮验证
+
+### 1.0.6-native / versionCode 12
+
+本版修复断连清理中的同步回调重入：遍历待处理请求前先取得快照并清空原集合，避免完成等待时的 `finally` 再次删除集合元素而抛出 `ConcurrentModificationException`。新增回归同时挂起历史、模型目录与用量读取，核对全部等待正常失败、加载标记清空、重新连接后从完整历史恢复，且不会自动重发用量请求。
+
+| 检查 | 本轮结果 |
+| --- | --- |
+| JVM 测试 | **93 项通过，0 失败** |
+| Android Lint | **0 个错误，29 条警告** |
+| APK 原生边界审计 | 通过 |
+| 物理设备覆盖安装 | `1.0.6-native` / versionCode 12 安装成功 |
+| 真实服务兼容性 | **v0.3.15 / 协议 26**；原有记录逐条校验无缺失或改写 |
+| 真实 Wi-Fi 只读历史 | **通过，约 16.4 秒**；选中会话 18 条事件；3 块共 92,090 个字符；单次连接失败回调 **0** |
+| 前台恢复检查 | 通过；不据此宣称完整断网恢复矩阵通过 |
+| 真实 Wi-Fi 历史分页 | **通过，约 47.6 秒**；2 个候选；30 块 / 30 ACK；947,499 个 UTF-16 code units；48 → 157 条事件；单次连接失败回调与被拒响应均为 0；前台恢复与清理通过 |
+
+真实服务检查使用显式 `runLive=true` 的 [ConfiguredProtocol26ReadOnlyTest](../app/src/androidTest/java/dev/ccdesk/nativeapp/core/ConfiguredProtocol26ReadOnlyTest.kt)，通过出站白名单禁止消息发送、会话创建/删除及权限修改。验证没有改变原有历史记录；Android APK 本身不执行服务器升级。
+
+APK 大小 **13,628,957 字节**，SHA-256 为 `539891255c66b5297bed16e849d9e9446d05c5107515e9b3affe0abd430eb30e`。本版沿用已有 Debug 签名；公开附件名称保持 `CCtunnel.apk`，旧版本附件不替换。
+
+设备测试初始有几次被 vivo 后台限制中断，这些运行不计为通过。随后在启动 instrumentation 后及时将测试 Activity 带到前台，两轮严格检查通过。
+
+真机 UI 另验证侧栏打开已有长会话、上滚后出现并点击“回到最新消息”，以及退出至桌面再返回；已加载历史正常显示，无残留加载提示。安装后的 `base.apk` SHA-256 与交付 APK 完全一致。
+
+本版尚未重跑完整设备套件、真实账号消息与工具执行，以及旧版浏览器下载至系统安装的完整更新链路。发布后匿名下载校验与公开更新源检查待发布完成后另行登记；1.0.5 的已通过结果作为下方历史证据保留，不并入 1.0.6 的测试数量。
+
+### 1.0.5-native 历史验证
 
 本轮构建为 `1.0.5-native` / versionCode 11，Debug 签名。以下区分本地协议夹具与真实已配置服务，不将 README 中旧版测试数量计入本轮。
 

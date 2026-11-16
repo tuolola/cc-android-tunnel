@@ -17,7 +17,7 @@
 </p>
 
 <p>
-  <a href="https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.5-native/CCtunnel.apk"><img src="https://img.shields.io/badge/APK-1.0.5--native-16a34a?style=for-the-badge" alt="下载 CCtunnel 1.0.5-native 公开测试版 APK" /></a>
+  <a href="https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.6-native/CCtunnel.apk"><img src="https://img.shields.io/badge/APK-1.0.6--native-16a34a?style=for-the-badge" alt="下载 CCtunnel 1.0.6-native 公开测试版 APK" /></a>
   <a href="#快速开始"><img src="https://img.shields.io/badge/使用教程-从服务器到手机-2563eb?style=for-the-badge" alt="从零开始使用" /></a>
   <a href="#验证与验收"><img src="https://img.shields.io/badge/验证-测试与审计-0f766e?style=for-the-badge" alt="测试与审计" /></a>
   <a href="https://github.com/sun168567/cc-desk-tunnel"><img src="https://img.shields.io/badge/项目来源-cc--desk--tunnel-475569?style=for-the-badge" alt="上游项目" /></a>
@@ -25,7 +25,7 @@
 </p>
 
 <p>
-  <img src="https://img.shields.io/badge/测试版-1.0.5--native-2563eb?style=flat-square" alt="测试版 1.0.5-native" />
+  <img src="https://img.shields.io/badge/测试版-1.0.6--native-2563eb?style=flat-square" alt="测试版 1.0.6-native" />
   <img src="https://img.shields.io/badge/Kotlin-2.2.10-7f52ff?style=flat-square" alt="Kotlin 2.2.10" />
   <img src="https://img.shields.io/badge/UI-Jetpack%20Compose-4285f4?style=flat-square" alt="Jetpack Compose" />
   <img src="https://img.shields.io/badge/Android-7.0%2B-3ddc84?style=flat-square" alt="Android 7.0 及以上" />
@@ -37,7 +37,7 @@
 
 </div>
 
-**1.0.5-native 协议兼容提示（versionCode 11）：** 本版使用**协议 26**，需要上游 **v0.3.15 服务端**，电脑客户端也应与服务端配套。旧公开版 [v1.0.4-native](https://github.com/tuolola/cc-android-tunnel/releases/tag/v1.0.4-native) 使用**协议 25 / 上游 v0.3.14**，两套协议不能混用。协议契约、兼容边界与本轮验证见 [协议 26 适配记录](./docs/protocol-26.md)。
+**1.0.6-native 协议兼容提示（versionCode 12）：** 本版使用**协议 26**，需要上游 **v0.3.15 服务端**，电脑客户端也应与服务端配套。旧公开版 [v1.0.4-native](https://github.com/tuolola/cc-android-tunnel/releases/tag/v1.0.4-native) 使用**协议 25 / 上游 v0.3.14**，两套协议不能混用。协议契约、兼容边界与本轮验证见 [协议 26 适配记录](./docs/protocol-26.md)。
 
 **公开版 1.0.4-native 兼容提示（versionCode 10）：** 本版只提供 WSS 服务直连，已移除 HTTPS 工作台登录及模式切换。旧 HTTPS 地址不会自动转换，请重新填写管理员提供的完整 WSS 服务地址和服务凭据；原有 WSS 连接继续使用对应地址已保存的凭据与证书指纹。
 
@@ -78,7 +78,7 @@ flowchart LR
 
 已验证范围、测试运行方式与待验证场景见[验证与验收](#验证与验收)。
 
-使用前需要可访问的工作台服务及认证信息：**v1.0.5-native 对应协议 26 / 上游 v0.3.15；旧版 v1.0.4-native 对应协议 25 / 上游 v0.3.14**。本仓库提供 Android 客户端，不包含工作台服务端或模型服务。当前 App 使用中文界面。
+使用前需要可访问的工作台服务及认证信息：**v1.0.6-native 对应协议 26 / 上游 v0.3.15；旧版 v1.0.4-native 对应协议 25 / 上游 v0.3.14**。本仓库提供 Android 客户端，不包含工作台服务端或模型服务。当前 App 使用中文界面。
 
 ## 历史界面实拍
 
@@ -121,13 +121,13 @@ flowchart LR
 | Android 体验 | 浅色与深色主题、原生多行输入框、键盘避让、滚动、手势、禁用与只读状态 |
 | 恢复与本地状态 | 临时断线时保留已加载历史，按持久事件游标恢复；保存服务范围内的偏好，通过 Android Keystore 保护凭据 |
 
-**App 更新（`1.0.2-native` 起）**：从侧栏底部头像进入设置，可手动检查、开启前台自动检查和选择测试版渠道；自动检查成功后间隔 24 小时，失败后 1 小时再试。下载交给系统浏览器，由用户安装。旧版 `v1.0.1-native` 不含此功能，需要先手动下载安装当前版本 `v1.0.5-native`。详见 [App 更新与版本发布](./docs/app-updates.md)。
+**App 更新（`1.0.2-native` 起）**：从侧栏底部头像进入设置，可手动检查、开启前台自动检查和选择测试版渠道；自动检查成功后间隔 24 小时，失败后 1 小时再试。下载交给系统浏览器，由用户安装。旧版 `v1.0.1-native` 不含此功能，需要先手动下载安装当前版本 `v1.0.6-native`。详见 [App 更新与版本发布](./docs/app-updates.md)。
 
 ## 快速开始
 
 下面以 **Ubuntu 24.04 LTS x86_64 VPS + Windows 10/11 x64 电脑 + Android 7.0 及以上手机** 为例，从购买服务器到手机接着操作电脑项目。已有服务端和已连接的桌面客户端，可直接从[第 6 步](#第-6-步在手机上安装-cctunnel)开始。
 
-**版本基准（2026-11-16 核对官方资产与安装脚本）：** 本教程使用上游 [v0.3.15](https://github.com/sun168567/cc-desk-tunnel/releases/tag/v0.3.15) / **协议 26**，对应 **v1.0.5-native**。旧公开 v1.0.4-native 使用上游 v0.3.14 / 协议 25，见[兼容说明](./docs/protocol-26.md)。上游桌面端和服务端使用同一版本；本项目的 `1.0.x-native` 是独立版本号，不需要与 `0.3.15` 数字相同。已有服务请按上游升级说明处理；核对部署文档不等于已替你升级或验证现有 VPS。
+**版本基准（2026-11-16 核对官方资产与安装脚本）：** 本教程使用上游 [v0.3.15](https://github.com/sun168567/cc-desk-tunnel/releases/tag/v0.3.15) / **协议 26**，对应 **v1.0.6-native**。旧公开 v1.0.4-native 使用上游 v0.3.14 / 协议 25，见[兼容说明](./docs/protocol-26.md)。上游桌面端和服务端使用同一版本；本项目的 `1.0.x-native` 是独立版本号，不需要与 `0.3.15` 数字相同。已有服务请按上游升级说明处理；本次联调服务已升级并验证，其他部署仍需单独核对版本及数据备份。
 
 ### 第 1 步：准备 VPS、电脑和模型账号
 
@@ -255,14 +255,14 @@ sudo cc-desk-tunnel summary
 
 **操作位置：Android 手机；需要自行构建时在开发电脑操作。**
 
-1. [直接下载 CCtunnel.apk（v1.0.5-native）](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.5-native/CCtunnel.apk)。适用于 **Android 7.0 及以上**，当前为 **Debug 签名的公开测试版**（versionCode 11）。查看[版本发布说明](https://github.com/tuolola/cc-android-tunnel/releases/tag/v1.0.5-native)和 [SHA256SUMS.txt 校验清单](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.5-native/SHA256SUMS.txt)。
+1. [直接下载 CCtunnel.apk（v1.0.6-native）](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.6-native/CCtunnel.apk)。适用于 **Android 7.0 及以上**，当前为 **Debug 签名的公开测试版**（versionCode 12）。查看[版本发布说明](https://github.com/tuolola/cc-android-tunnel/releases/tag/v1.0.6-native)和 [SHA256SUMS.txt 校验清单](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.6-native/SHA256SUMS.txt)。
 2. 核对 SHA-256 后将 APK 传到手机安装。也可以连接 USB 调试，在 APK 所在目录执行 `adb install -r .\CCtunnel.apk`。已有应用须同包名、同签名且版本允许更新，才能覆盖安装。
 3. 打开手机上的 **CCtunnel**。手机只需安装 APK；Node、Docker、Android Studio 均不需要安装到手机。
 
-`1.0.5-native` APK 大小为 **14,522,782 字节**，请与本版发布附件中的 `SHA256SUMS.txt` 核对 SHA-256：
+`1.0.6-native` APK 大小为 **13,628,957 字节**，请与本版发布附件中的 `SHA256SUMS.txt` 核对 SHA-256：
 
 ```text
-13646f48395fe0b7303ce087bdcbcce47a3b80567c5da21f40745e8cc96e2bf2
+539891255c66b5297bed16e849d9e9446d05c5107515e9b3affe0abd430eb30e
 ```
 
 从 `v1.0.1-native` 升级需手动下载本版；旧版没有 App 更新入口。本版沿用相同签名，不需要先卸载旧版。
@@ -316,7 +316,7 @@ sudo cc-desk-tunnel summary
 | 手机能看历史，但电脑项目不能执行 | 电脑是否在线、未睡眠，上游桌面端和执行通道是否保持连接，会话是否属于那台电脑 |
 | 手机新会话里找不到 `D:\Projects` | 新建的是 Linux 服务端会话；回到电脑先建立项目会话，再从手机打开 |
 | 已连接但模型不回复 | 在桌面账号页检查授权、额度及模型配置，并检查服务器到模型服务的网络；工作台连接成功不代表模型账号可用 |
-| 提示协议/版本不一致 | v1.0.5-native 使用协议 26 / 上游 v0.3.15；旧公开 v1.0.4-native 使用协议 25。先核对安装来源及对应上游版本，见[兼容说明](./docs/protocol-26.md) |
+| 提示协议/版本不一致 | v1.0.6-native 使用协议 26 / 上游 v0.3.15；旧公开 v1.0.4-native 使用协议 25。先核对安装来源及对应上游版本，见[兼容说明](./docs/protocol-26.md) |
 
 在 VPS 上可运行以下命令；详细操作见[上游运维手册](https://github.com/sun168567/cc-desk-tunnel/blob/v0.3.15/deploy/README.md#运维)：
 
@@ -369,7 +369,7 @@ macOS/Linux 使用 `./gradlew`。直接构建的 APK 位于 **`app/build/outputs
 
 ## 验证与验收
 
-1.0.5-native 协议 26 的验证单独记录在[协议 26 适配记录](./docs/protocol-26.md#本轮验证)；下方旧版结果不代表本轮适配已经通过。
+1.0.6-native 协议 26 的验证单独记录在[协议 26 适配记录](./docs/protocol-26.md#本轮验证)；下方旧版结果不代表本轮适配已经通过。
 
 ### 运行检查
 
@@ -386,7 +386,21 @@ python -B scripts/audit-native-apk.py app/build/outputs/apk/debug/app-debug.apk 
 
 [原生构建检查](./gradle/native-boundary.gradle.kts) 会检查生产源码及已解析的运行时依赖；APK 构建还会检查 DEX 引用、打包资源和原生库，拒绝受限的 JavaScript 引擎及 WebView 渲染。[Python 审计](./scripts/audit-native-apk.py) 提供独立复核。检查允许 AndroidX 的静态 `WebView.findAddress` 兼容引用，仍会拒绝创建或渲染 WebView。
 
+### 1.0.6-native 断连清理修复与真实服务验证 — 2026-11-16
+
+本版修复断开连接时，并发历史、模型目录和用量读取的清理回调重入，导致待处理请求集合遍历抛出 `ConcurrentModificationException` 的问题。先移出全部旧请求，再结束等待，保留已有历史重读和业务命令不自动重发规则。界面继续沿用暖白、炭灰和陶土色，以及已恢复的胶囊输入框与简单侧栏。
+
+`1.0.6-native` / versionCode 12 已通过 **93 项 JVM 测试**（含同步清理重入及重新连接回归）、Android Lint（**0 个错误、29 条警告**）和 APK 原生边界审计，并成功覆盖安装到实体手机。
+
+真实 **v0.3.15 / 协议 26** 服务上的 Wi-Fi 只读历史与分页验证通过：分页接收 **30 块 / 30 ACK**，目标会话从 **48 条事件**追加至 **157 条**，单次连接失败回调与被拒响应均为 **0**，前台恢复和清理检查通过。原有记录逐条校验无缺失或改写；测试未发送用户消息或修改会话与权限。详细计数见[协议验证记录](./docs/protocol-26.md#本轮验证)。
+
+真机 UI 另验证侧栏打开已有长会话、上滚后出现并点击“回到最新消息”，以及退出至桌面再返回；已加载历史正常显示，无残留加载提示。安装后的 `base.apk` SHA-256 与交付 APK 完全一致。
+
+本版未重跑完整设备套件、真实账号消息与工具执行、旧版经浏览器下载和系统安装的完整更新链路。发布后下载校验与公开更新源结果待发布完成后单独登记。详细边界见[协议验证记录](./docs/protocol-26.md#本轮验证)。
+
 ### 1.0.5-native 协议 26 与暖色主题 — 2026-11-16
+
+以下为 1.0.5 发布时的历史结果；当时的协议不匹配已由上方 1.0.6 联调服务升级解决。
 
 本版沿用熟悉的聊天输入框与侧栏形态，使用暖白、炭灰和陶土色，统一浅色/深色页面及弹层；适配协议 26 的历史分块、逐块确认、取消及失败后重读。
 
@@ -394,7 +408,7 @@ python -B scripts/audit-native-apk.py app/build/outputs/apk/debug/app-debug.apk 
 
 真机 **7 项 TLS 测试全部通过**：5 项 NativeTlsIntegrationTest 与 2 项协议 26 分块历史测试。最终界面与交互检查：25 项真机交互通过（侧栏 2、流式滚动 3、聊天 7、原生输入框 7、手势 6），覆盖侧栏 30/60/65 条本地追加与搜索、IME/大字输入、模型与审批、滚动、途中反向拖动和退出阻断。浅色与深色各 14 个状态截图测试通过；人工复看两主题聊天与侧栏，确认原胶囊输入框、圆形发送按钮和简单全宽选中行已恢复，未见裁切或旧样式残留。已配置真实服务的只读检查返回 `protocolMismatch`：该 VPS 须先同步到上游 v0.3.15 / 协议 26，再做真实历史联调；当前尚未通过该 VPS 的历史读取、分页或恢复验收，本轮没有升级该服务。协议 26 本地 TLS 夹具测试不能替代真实 VPS 验收，详见[协议验证记录](./docs/protocol-26.md#本轮验证)。
 
-已核对真机安装为 `1.0.5-native` / versionCode 11，安装后的 `base.apk` SHA-256 与上方交付 APK 一致。深色截图使用测试内局部深色主题，系统仍为浅色；系统状态栏随正式系统主题切换的效果未另行验收。发布后匿名下载的 APK 与 SHA256SUMS.txt 已核对一致；真机公开更新源测试已读取到 v1.0.5-native 及 APK 校验元数据。旧版 App 经浏览器下载、系统安装的完整升级链路未重跑。
+已核对真机安装为 `1.0.5-native` / versionCode 11，安装后的 `base.apk` SHA-256 与该版发布附件 一致。深色截图使用测试内局部深色主题，系统仍为浅色；系统状态栏随正式系统主题切换的效果未另行验收。发布后匿名下载的 APK 与 SHA256SUMS.txt 已核对一致；真机公开更新源测试已读取到 v1.0.5-native 及 APK 校验元数据。旧版 App 经浏览器下载、系统安装的完整升级链路未重跑。
 
 ### 1.0.4-native 历史验证 — 2026-11-15
 

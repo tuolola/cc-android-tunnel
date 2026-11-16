@@ -17,7 +17,7 @@
 </p>
 
 <p>
-  <a href="https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.5-native/CCtunnel.apk"><img src="https://img.shields.io/badge/APK-1.0.5--native-16a34a?style=for-the-badge" alt="Download the CCtunnel 1.0.5-native public preview APK" /></a>
+  <a href="https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.6-native/CCtunnel.apk"><img src="https://img.shields.io/badge/APK-1.0.6--native-16a34a?style=for-the-badge" alt="Download the CCtunnel 1.0.6-native public preview APK" /></a>
   <a href="#quick-start"><img src="https://img.shields.io/badge/Setup-VPS%20to%20Android-2563eb?style=for-the-badge" alt="Set up the server, desktop and phone" /></a>
   <a href="#verification"><img src="https://img.shields.io/badge/Verification-Tests%20%26%20Audit-0f766e?style=for-the-badge" alt="Tests and audit" /></a>
   <a href="https://github.com/sun168567/cc-desk-tunnel"><img src="https://img.shields.io/badge/Origin-cc--desk--tunnel-475569?style=for-the-badge" alt="Upstream project" /></a>
@@ -25,7 +25,7 @@
 </p>
 
 <p>
-  <img src="https://img.shields.io/badge/Preview-1.0.5--native-2563eb?style=flat-square" alt="Preview 1.0.5-native" />
+  <img src="https://img.shields.io/badge/Preview-1.0.6--native-2563eb?style=flat-square" alt="Preview 1.0.6-native" />
   <img src="https://img.shields.io/badge/Kotlin-2.2.10-7f52ff?style=flat-square" alt="Kotlin 2.2.10" />
   <img src="https://img.shields.io/badge/UI-Jetpack%20Compose-4285f4?style=flat-square" alt="Jetpack Compose" />
   <img src="https://img.shields.io/badge/Android-7.0%2B-3ddc84?style=flat-square" alt="Android 7.0 and later" />
@@ -37,7 +37,7 @@
 
 </div>
 
-**1.0.5-native protocol compatibility (versionCode 11):** this version uses **protocol 26** and requires the upstream **v0.3.15 server**, with a matching desktop client. The older public [v1.0.4-native](https://github.com/tuolola/cc-android-tunnel/releases/tag/v1.0.4-native) uses **protocol 25 / upstream v0.3.14**; these protocols are not interchangeable. See the [protocol contract, compatibility and verification record (Chinese)](./docs/protocol-26.md).
+**1.0.6-native protocol compatibility (versionCode 12):** this version uses **protocol 26** and requires the upstream **v0.3.15 server**, with a matching desktop client. The older public [v1.0.4-native](https://github.com/tuolola/cc-android-tunnel/releases/tag/v1.0.4-native) uses **protocol 25 / upstream v0.3.14**; these protocols are not interchangeable. See the [protocol contract, compatibility and verification record (Chinese)](./docs/protocol-26.md).
 
 **Public 1.0.4-native compatibility note (versionCode 10):** This version supports only direct WSS service connections. HTTPS workbench login and the connection-mode switch have been removed. Old HTTPS addresses are not converted automatically: enter the complete WSS service address and credential supplied by your administrator. Existing WSS connections retain the credentials and certificate fingerprints saved for their addresses.
 
@@ -75,7 +75,7 @@ This repository contains a standalone Android project. Its UI, networking, Markd
 
 See [verification](#verification) for the checked scope, test commands and scenarios awaiting validation.
 
-You need an accessible workbench service and its authentication details: **v1.0.5-native requires protocol 26 / upstream v0.3.15; older v1.0.4-native requires protocol 25 / upstream v0.3.14**. This repository supplies the Android client, not the workbench server or model service. The app currently uses a Chinese interface.
+You need an accessible workbench service and its authentication details: **v1.0.6-native requires protocol 26 / upstream v0.3.15; older v1.0.4-native requires protocol 25 / upstream v0.3.14**. This repository supplies the Android client, not the workbench server or model service. The app currently uses a Chinese interface.
 
 ## Historical App Screenshots
 
@@ -118,13 +118,13 @@ The table describes the native implementation. Server capabilities and permissio
 | Android behavior | Light/dark themes, native multiline editor, keyboard avoidance, scrolling, gestures, disabled and read-only states |
 | Recovery and local state | Retain loaded history during temporary disconnection, recover by durable event cursor, persist service-scoped preferences and protect credentials with Android Keystore |
 
-**App updates (starting with `1.0.2-native`)**: open settings from the sidebar's bottom avatar for manual checks, automatic foreground checks and a prerelease toggle. Automatic checks wait 24 hours after success or one hour after failure. Downloads open in the system browser for user installation. Older `v1.0.1-native` installations do not include this feature; download and install the current `v1.0.5-native` version manually first. See [App updates and release maintenance (Chinese)](./docs/app-updates.md).
+**App updates (starting with `1.0.2-native`)**: open settings from the sidebar's bottom avatar for manual checks, automatic foreground checks and a prerelease toggle. Automatic checks wait 24 hours after success or one hour after failure. Downloads open in the system browser for user installation. Older `v1.0.1-native` installations do not include this feature; download and install the current `v1.0.6-native` version manually first. See [App updates and release maintenance (Chinese)](./docs/app-updates.md).
 
 ## Quick Start
 
 This walkthrough uses an **Ubuntu 24.04 LTS x86_64 VPS, Windows 10/11 x64 computer and Android 7.0+ phone**. Already have a working server and connected desktop? Start with step 6. A more detailed [Chinese walkthrough](./README.md#快速开始) includes per-step success checks.
 
-**Version baseline (official assets and installer checked November 16, 2026):** this walkthrough uses upstream [v0.3.15](https://github.com/sun168567/cc-desk-tunnel/releases/tag/v0.3.15) / **protocol 26**, paired with **v1.0.5-native**. Older public v1.0.4-native uses upstream v0.3.14 / protocol 25; see the [compatibility notes (Chinese)](./docs/protocol-26.md). Android has an independent `1.0.x-native` version. Keep the upstream desktop/server versions aligned and follow upstream upgrade instructions for existing deployments. Checking the documentation does not mean your VPS has been upgraded or validated.
+**Version baseline (official assets and installer checked November 16, 2026):** this walkthrough uses upstream [v0.3.15](https://github.com/sun168567/cc-desk-tunnel/releases/tag/v0.3.15) / **protocol 26**, paired with **v1.0.6-native**. Older public v1.0.4-native uses upstream v0.3.14 / protocol 25; see the [compatibility notes (Chinese)](./docs/protocol-26.md). Android has an independent `1.0.x-native` version. Keep the upstream desktop/server versions aligned and follow upstream upgrade instructions for existing deployments. The integration server was upgraded and checked in this run; other deployments still require their own version and backup checks.
 
 ### 1. Get a VPS and prepare your devices
 
@@ -214,14 +214,14 @@ Keep the three credentials separate: **SSH key/password** manages the VPS; **ser
 
 ### 6. Install CCtunnel on Android
 
-Download [CCtunnel.apk (v1.0.5-native)](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.5-native/CCtunnel.apk) for **Android 7.0 or newer**. This is a **Debug-signed public preview** (versionCode 11). Read the [release notes](https://github.com/tuolola/cc-android-tunnel/releases/tag/v1.0.5-native) and download the [SHA256SUMS.txt checksum list](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.5-native/SHA256SUMS.txt).
+Download [CCtunnel.apk (v1.0.6-native)](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.6-native/CCtunnel.apk) for **Android 7.0 or newer**. This is a **Debug-signed public preview** (versionCode 12). Read the [release notes](https://github.com/tuolola/cc-android-tunnel/releases/tag/v1.0.6-native) and download the [SHA256SUMS.txt checksum list](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.6-native/SHA256SUMS.txt).
 
 Verify the SHA-256 checksum, then transfer the APK to the phone and install it. With USB debugging enabled, you can alternatively run `adb install -r .\CCtunnel.apk` from the APK's directory on the development computer. Updating an existing installation requires the same package name and signing key, with a version Android permits as an update. Open **CCtunnel** and its connection screen. The phone does not need Node, Docker or Android Studio.
 
-The `1.0.5-native` APK is **14,522,782 bytes**. Verify its SHA-256 against the release's `SHA256SUMS.txt`:
+The `1.0.6-native` APK is **13,628,957 bytes**. Verify its SHA-256 against the release's `SHA256SUMS.txt`:
 
 ```text
-13646f48395fe0b7303ce087bdcbcce47a3b80567c5da21f40745e8cc96e2bf2
+539891255c66b5297bed16e849d9e9446d05c5107515e9b3affe0abd430eb30e
 ```
 
 Upgrade from `v1.0.1-native` by downloading this version manually; the older version has no app-update entry point. The signing certificate is unchanged, so uninstalling the old version first is unnecessary.
@@ -267,7 +267,7 @@ A server-only session does not need the Windows computer online, but the server 
 | History loads but computer commands fail | Computer awake and online, desktop execution channel ready, correct session ownership |
 | New phone session cannot find a Windows path | It is a server session; create the project session on the desktop and open it on the phone |
 | Connected but model requests fail | Model login, quota, provider configuration and outbound server connectivity |
-| Version mismatch | v1.0.5-native uses protocol 26 / upstream v0.3.15; older public v1.0.4-native uses protocol 25. Check the installed build and matching upstream version; see [compatibility notes (Chinese)](./docs/protocol-26.md) |
+| Version mismatch | v1.0.6-native uses protocol 26 / upstream v0.3.15; older public v1.0.4-native uses protocol 25. Check the installed build and matching upstream version; see [compatibility notes (Chinese)](./docs/protocol-26.md) |
 
 On the VPS use `sudo cc-desk-tunnel status`, `sudo cc-desk-tunnel logs` and `sudo cc-desk-tunnel summary`. Before upgrades or certificate changes, stop active work, back up and follow [upstream maintenance](https://github.com/sun168567/cc-desk-tunnel/blob/v0.3.15/deploy/README.md#运维). Backups contain secrets and history. Android APK updates are independent of upstream desktop/server updates.
 
@@ -312,7 +312,7 @@ After installation, return to step 7 above. No service URL, password or token is
 
 ## Verification
 
-The protocol 26 adaptation in 1.0.5-native has a separate [verification record (Chinese)](./docs/protocol-26.md#本轮验证). The historical results below do not establish acceptance of this adaptation.
+The protocol 26 adaptation in 1.0.6-native has a separate [verification record (Chinese)](./docs/protocol-26.md#本轮验证). The historical results below do not establish acceptance of this adaptation.
 
 ### Run the checks
 
@@ -329,7 +329,21 @@ Use `scripts/measure-performance.ps1` with the [performance testing guide (Chine
 
 [The native build guard](./gradle/native-boundary.gradle.kts) checks production sources and resolved runtime dependencies. APK assembly also checks DEX references, packaged assets and native libraries for excluded JavaScript engines and WebView rendering. [The Python audit](./scripts/audit-native-apk.py) provides a separate check. The guard permits AndroidX's static `WebView.findAddress` compatibility reference; constructing or rendering a WebView remains rejected.
 
+### 1.0.6-native disconnect cleanup and live-service verification — 2026-11-16
+
+This version fixes a `ConcurrentModificationException` during disconnect cleanup when pending history, model-catalog and usage requests immediately resume their cleanup callbacks. Old requests are detached before their waiters are completed. Existing history-reload behavior and the rule against automatically replaying business commands are preserved. The warm ivory, charcoal and terracotta theme retains the restored pill composer and simple sidebar.
+
+`1.0.6-native` / versionCode 12 passed **93 JVM tests**, including synchronous cleanup re-entry and reconnection, Android Lint (**0 errors, 29 warnings**) and the APK native-boundary audit. The verified build was installed over the existing app on the physical phone.
+
+Read-only history and pagination checks over real Wi-Fi passed against **v0.3.15 / protocol 26**: **30 chunks / 30 acknowledgments**, with the target session expanding from **48 to 157 events**. Connection-failure callbacks and rejected responses were both **0**; foreground recovery and cleanup passed. Record-by-record verification found no missing or modified original records. No user messages were sent and no sessions or permissions were changed. Detailed measurements are in the [protocol verification record (Chinese)](./docs/protocol-26.md#本轮验证).
+
+Physical UI checks also covered opening an existing long conversation from the sidebar, scrolling up and using “Jump to latest”, then returning from the launcher; loaded history remained visible without a stale loading indicator. The installed `base.apk` SHA-256 matches the delivered APK exactly.
+
+The complete device suite, real-account messaging/tool execution and the older-app browser-download/system-install update path were not rerun. Post-publication download checksums and the public update feed will be recorded separately after release. See the [protocol verification record (Chinese)](./docs/protocol-26.md#本轮验证).
+
 ### 1.0.5-native protocol 26 and warm theme — 2026-11-16
+
+These are historical results from the 1.0.5 release. The protocol mismatch recorded then was resolved by the integration-server upgrade documented above for 1.0.6.
 
 This version retains the familiar composer and sidebar forms, with warm ivory, charcoal and terracotta colors across light/dark pages and overlays. Protocol 26 support handles history chunks, acknowledgments, cancellation and recovery after incomplete reads.
 
@@ -337,7 +351,7 @@ This build passed **92 JVM tests (0 failures)**, Android Lint (**0 errors, 40 wa
 
 Final physical-device verification: **7 TLS tests passed on the physical phone: 5 NativeTlsIntegrationTest cases and 2 protocol 26 chunked-history cases**. Final UI and interaction checks: 25 physical-device interaction tests passed (sidebar 2, streaming/scrolling 3, chat 7, native composer 7, gestures 6), covering 30/60/65-row local expansion and search, IME/large-text input, model and approval controls, scrolling, reversed drags and exit blocking. Visual tests passed for 14 states in each light/dark theme. Manual review of chat and sidebar captures in both themes confirmed the restored pill composer, circular send button and simple full-width selected row, without observed clipping or leftover styling. The read-only check of the configured real service returned `protocolMismatch`: that VPS must first be aligned with upstream v0.3.15 / protocol 26 before live integration can proceed. History, pagination and recovery on that VPS have not passed validation, and this run did not upgrade the service. Protocol 26 local TLS fixtures are separate evidence; see the [protocol verification record (Chinese)](./docs/protocol-26.md#本轮验证).
 
-The installed phone app was verified as `1.0.5-native` / versionCode 11; its `base.apk` SHA-256 matches the delivered APK above. Dark captures use a local test theme while the system stays light; status-bar behavior under actual system-theme changes was not separately validated. After publication, anonymously downloaded APK/checksum assets matched the verified build. The physical-phone public-feed test found v1.0.5-native and APK checksum metadata. The complete older-app browser-download/system-install upgrade path was not rerun.
+The installed phone app was verified as `1.0.5-native` / versionCode 11; its `base.apk` SHA-256 matches that version’s release asset. Dark captures use a local test theme while the system stays light; status-bar behavior under actual system-theme changes was not separately validated. After publication, anonymously downloaded APK/checksum assets matched the verified build. The physical-phone public-feed test found v1.0.5-native and APK checksum metadata. The complete older-app browser-download/system-install upgrade path was not rerun.
 
 ### 1.0.4-native historical verification — 2026-11-15
 

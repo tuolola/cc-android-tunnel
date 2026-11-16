@@ -84,11 +84,15 @@ class WorkbenchRepository(private val transport: WorkbenchTransport, private val
         generation++
         retry?.cancel(); retry = null; handshake?.cancel(); handshake = null
         val old = socket; socket = null; openSession = null; old?.close()
-        pending.values.forEach {
+        // Completing a waiter can immediately resume sendCommand's finally block.
+        // Detach all old requests before invoking those continuations.
+        val interrupted = pending.values.toList()
+        pending.clear()
+        interrupted.forEach {
             if (it.type == "session.subscribe" && it.frame == null) it.sessionId?.let(needsReload::add)
             it.timeout?.cancel(); it.result.completeExceptionally(IllegalStateException("连接已中断，请恢复连接后核对操作结果。"))
         }
-        pending.clear(); subscription = null; catalogReads.clear(); catalogAttempts.clear(); catalogPresenceKnown = false; refreshingQuota = false
+        subscription = null; catalogReads.clear(); catalogAttempts.clear(); catalogPresenceKnown = false; refreshingQuota = false
         historyOwners.clear()
         patch { it.copy(modelCatalogLoading = emptySet(), histories = it.histories.mapValues { (_, h) -> h.copy(loading = false,fragments = emptyList()) }) }
         return generation

@@ -1,6 +1,7 @@
 package dev.ccdesk.nativeapp.core
 
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.async
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
@@ -10,6 +11,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
+import kotlin.coroutines.CoroutineContext
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class ProtocolTest {
@@ -144,6 +146,50 @@ class ProtocolTest {
             assertEquals(listOf(1L, 20L), repo.state.value.histories.getValue("s").events.map { it.sequence })
             assertFalse(repo.state.value.histories.getValue("s").loading)
             assertEquals("parallel-model", repo.state.value.modelCatalogs.getValue("server").models.single().value)
+        } finally { repo.dispose() }
+    }
+
+    @Test fun disconnectSettlesAllPendingReadsWithImmediateContinuationsAndCanReconnect() = runTest {
+        // Resume on the caller's thread to expose the same synchronous cleanup as Main.immediate.
+        val immediate = object : CoroutineDispatcher() {
+            override fun dispatch(context: CoroutineContext, block: Runnable) = block.run()
+        }
+        val t = FakeTransport(); val repo = WorkbenchRepository(t, immediate)
+        try {
+            repo.connectService("wss://example.test/ws", serviceCredential)
+            val socket = t.sockets.single(); ready(socket)
+            val history = async(immediate) { runCatching { repo.selectSession("s") } }
+            val request = historyRequest(socket)
+            socket.frame(historyPart(request, "["))
+            val catalog = async(immediate) { runCatching { repo.loadModelCatalog("s") } }
+            val usage = async(immediate) { runCatching { repo.command("usage.summary") } }
+            assertFalse(history.isCompleted); assertFalse(catalog.isCompleted); assertFalse(usage.isCompleted)
+            assertTrue(repo.state.value.histories.getValue("s").loading)
+            assertTrue(repo.state.value.modelCatalogLoading.isNotEmpty())
+
+            repo.foreground(false)
+            socket.observer.failed(java.io.IOException("Connection lost with concurrent reads"))
+
+            listOf(history.await(), catalog.await(), usage.await()).forEach { result ->
+                assertTrue("Every pending operation must fail with the disconnect reason", result.exceptionOrNull()?.message.orEmpty().contains("连接已中断"))
+            }
+            assertEquals("offline", repo.state.value.status)
+            assertTrue(socket.closed)
+            assertFalse(repo.state.value.histories.getValue("s").loading)
+            assertTrue(repo.state.value.modelCatalogLoading.isEmpty())
+            assertFalse("Detached requests must not send cancellation on the closed socket",
+                socket.sent.any { it.optString("type") == "session.history.cancel" })
+
+            repo.foreground(true)
+            val next = t.sockets.last(); assertNotSame(socket, next); ready(next)
+            val retried = historyRequest(next)
+            assertEquals(0L, retried.getLong("afterSequence"))
+            completeHistory(next, retried)
+            assertEquals("online", repo.state.value.status)
+            assertEquals(listOf(1L), repo.state.value.histories.getValue("s").events.map { it.sequence })
+            assertFalse(repo.state.value.histories.getValue("s").loading)
+            assertNull(repo.state.value.histories.getValue("s").loadError)
+            assertFalse(next.sent.any { it.optString("type") == "usage.summary" })
         } finally { repo.dispose() }
     }
 

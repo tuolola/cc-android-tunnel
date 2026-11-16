@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assume.assumeTrue
 import org.junit.Test
@@ -19,13 +20,16 @@ import org.junit.runner.RunWith
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 
 /** Opt-in verification of the configured service. No business writes or user data in reports. */
 @RunWith(AndroidJUnit4::class)
 class ConfiguredProtocol26ReadOnlyTest {
     @Test fun configuredServiceLoadsExistingHistoryAndKeepsItsConnection() = runBlocking<Unit> {
-        assumeTrue("Requires -e runLive true", InstrumentationRegistry.getArguments().getString("runLive") == "true")
+        val arguments = InstrumentationRegistry.getArguments()
+        assumeTrue("Requires -e runLive true", arguments.getString("runLive") == "true")
+        val requireEarlier = arguments.getString("requireEarlier") == "true"
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         // Decryption failure may remove an invalid saved secret. Read through a memory snapshot so
         // even that recovery path cannot change the user's actual preferences or saved credentials.
@@ -34,11 +38,12 @@ class ConfiguredProtocol26ReadOnlyTest {
         val original = AndroidWorkbenchTransport(saved)
         val transport = AndroidWorkbenchTransport(isolated)
         val counts = FrameCounts()
+        val timings = PhaseTimings()
         val mismatch = AtomicBoolean()
         val readyProtocol = AtomicInteger()
         val existingSessions = ConcurrentHashMap.newKeySet<String>()
         val serviceVersion = AtomicReference<String?>()
-        val report = json("status" to "running", "clientProtocol" to PROTOCOL_VERSION,
+        val report = json("status" to "running", "clientProtocol" to PROTOCOL_VERSION, "requireEarlier" to requireEarlier,
             "historyLoaded" to false, "earlierPageStatus" to "notChecked",
             "foregroundStatus" to "notChecked", "cleanupComplete" to false)
         val reportFile = context.cacheDir.resolve("protocol26-live-readonly.json")
@@ -46,6 +51,9 @@ class ConfiguredProtocol26ReadOnlyTest {
             report.put("serviceProtocol", readyProtocol.get().takeIf { it > 0 } ?: JSONObject.NULL)
                 .put("serviceVersion", serviceVersion.get() ?: JSONObject.NULL)
                 .put("frameCounts", counts.json())
+                .put("socketFailure", counts.lastFailure.get() ?: JSONObject.NULL)
+                .put("stageElapsedMillis", timings.json())
+                .put("elapsedMillis", timings.elapsedMillis())
             reportFile.writeText(report.toString(2))
         }
         val observed = object : WorkbenchTransport by transport {
@@ -56,7 +64,9 @@ class ConfiguredProtocol26ReadOnlyTest {
                     override fun opened() { counts.opened.incrementAndGet(); observer.opened() }
                     override fun message(text: String) {
                         counts.incoming.incrementAndGet()
-                        runCatching { JSONObject(text) }.getOrNull()?.let { frame ->
+                        val parsed = runCatching { JSONObject(text) }.getOrNull()
+                        counts.recordIncoming(parsed?.optString("type"))
+                        parsed?.let { frame ->
                             when (frame.optString("type")) {
                                 "ready" -> {
                                     readyProtocol.set(frame.optInt("protocolVersion"))
@@ -71,7 +81,13 @@ class ConfiguredProtocol26ReadOnlyTest {
                                     serviceVersion.set(frame.optString("service").takeIf { it.matches(Regex("[0-9]+\\.[0-9]+\\.[0-9]+")) })
                                 }
                                 "session.snapshot" -> counts.snapshots.incrementAndGet()
-                                "session.history.part" -> counts.parts.incrementAndGet()
+                                "session.history.part" -> {
+                                    counts.parts.incrementAndGet()
+                                    (frame.opt("data") as? String)?.length?.let { length ->
+                                        counts.partChars.addAndGet(length.toLong())
+                                        counts.maxPartChars.updateAndGet { maxOf(it, length) }
+                                    }
+                                }
                                 "session.event" -> counts.events.incrementAndGet()
                                 "session.fragment" -> counts.fragments.incrementAndGet()
                                 "response" -> {
@@ -84,10 +100,12 @@ class ConfiguredProtocol26ReadOnlyTest {
                     }
                     override fun closed(code: Int, reason: String) {
                         counts.closed.incrementAndGet()
+                        counts.lastCloseCode.set(code)
                         observer.closed(code, reason)
                     }
                     override fun failed(cause: Throwable) {
                         counts.failed.incrementAndGet()
+                        counts.lastFailure.set(safeSocketFailure(cause, timings.elapsedMillis()))
                         observer.failed(cause)
                     }
                 })
@@ -122,6 +140,7 @@ class ConfiguredProtocol26ReadOnlyTest {
         }
         val repository = WorkbenchRepository(observed)
         var stage = "configuration"
+        fun enterStage(next: String) { timings.begin(next); stage = next }
         var failure: String? = null
         fun stop(status: String): Nothing { report.put("status", status); save(); throw ReadOnlyFailure(status) }
         fun protocolMismatch(): Boolean = mismatch.get() || repository.state.value.error.orEmpty().let {
@@ -137,7 +156,7 @@ class ConfiguredProtocol26ReadOnlyTest {
             transport.setEndpoint(endpoint)
             transport.setFingerprint(endpoint, original.fingerprint(endpoint))
             transport.saveCredential(endpoint, credential)
-            stage = "connection"
+            enterStage("connection")
             repository.start()
             val connected = withTimeout(35_000) {
                 repository.state.first { it.status == "online" || it.status == "offline" || it.status == "setup" }
@@ -147,12 +166,12 @@ class ConfiguredProtocol26ReadOnlyTest {
             report.put("status", "online").put("sessionCount", connected.sessions.size)
             save()
 
-            stage = "history"
+            enterStage("history")
             val serverDevices = connected.serverDeviceIds()
             val candidates = connected.sessions.sortedWith(compareBy<Session>(
                 { if (it.activeRun == null) 0 else 1 },
                 { if (it.device == null || it.device.server || it.device.id in serverDevices || it.device.id == connected.localDeviceId) 0 else 1 },
-            ).thenByDescending { it.updatedAt }).take(12)
+            ).thenByDescending { it.updatedAt }).take(if (requireEarlier) 24 else 12)
             var selected: Session? = null
             var initial: History? = null
             var sampled = 0
@@ -162,18 +181,24 @@ class ConfiguredProtocol26ReadOnlyTest {
                     repository.selectSession(candidate.id)
                     val history = repository.state.value.histories[candidate.id]
                     if (history == null || !history.loaded || history.loading || history.loadError != null) stop("historyFailed")
-                    if (history.events.isNotEmpty()) { selected = candidate; initial = history; break }
+                    if (history.events.isNotEmpty() && (!requireEarlier || history.hasEarlier)) {
+                        selected = candidate; initial = history; break
+                    }
                 }
             }
             report.put("sessionsSampled", sampled)
-            val session = selected ?: stop(if (sampled < connected.sessions.size) "noHistoryInSample" else "noHistoryAvailable")
+            val session = selected ?: stop(when {
+                requireEarlier -> "noEarlierHistoryInSample"
+                sampled < connected.sessions.size -> "noHistoryInSample"
+                else -> "noHistoryAvailable"
+            })
             val history = initial ?: stop("historyFailed")
             report.put("historyLoaded", true).put("initialEventCount", history.events.size)
                 .put("initialFragmentCount", history.fragments.size)
             val sequences = history.events.map { it.sequence }.toSet()
             if (sequences.size != history.events.size) stop("duplicateHistory")
             if (history.hasEarlier) {
-                stage = "earlierPage"
+                enterStage("earlierPage")
                 withTimeout(120_000) { repository.loadEarlier(session.id) }
                 val earlier = repository.state.value.histories[session.id] ?: stop("earlierPageFailed")
                 val expanded = earlier.events.map { it.sequence }.toSet()
@@ -183,7 +208,7 @@ class ConfiguredProtocol26ReadOnlyTest {
                 report.put("earlierPageStatus", "passed").put("expandedEventCount", earlier.events.size)
             } else report.put("earlierPageStatus", "notAvailable")
 
-            stage = "foreground"
+            enterStage("foreground")
             val before = counts.connections.get()
             repository.foreground(false)
             delay(250)
@@ -205,6 +230,7 @@ class ConfiguredProtocol26ReadOnlyTest {
             report.put("status", status).put("failedStage", stage)
             save()
         } finally {
+            enterStage("cleanup")
             withContext(NonCancellable) {
                 var clean = runCatching {
                     withContext(Dispatchers.Main.immediate) { repository.dispose() }
@@ -219,6 +245,7 @@ class ConfiguredProtocol26ReadOnlyTest {
                     report.put("status", "cleanupFailed")
                     failure = "Configured protocol 26 read-only verification cleanup did not complete."
                 }
+                timings.finish()
                 save()
             }
         }
@@ -227,19 +254,94 @@ class ConfiguredProtocol26ReadOnlyTest {
 
     private class ReadOnlyFailure(val status: String) : RuntimeException()
 
+    /** Inspect error text only for a fixed category; never retain or report it. */
+    private fun safeSocketFailure(cause: Throwable, elapsedMillis: Long): JSONObject {
+        val chain = generateSequence(cause) { it.cause }.take(6).toList()
+        fun className(error: Throwable) = error.javaClass.simpleName
+            .takeIf { it.matches(Regex("[A-Za-z_$][A-Za-z0-9_$]{0,95}")) } ?: "UnknownThrowable"
+        fun mentions(vararg markers: String) = chain.any { error ->
+            markers.any { error.message.orEmpty().contains(it, ignoreCase = true) }
+        }
+        val category = when {
+            chain.any { error -> error.message.orEmpty().let { text ->
+                (text.contains("ping", ignoreCase = true) && text.contains("pong", ignoreCase = true)) ||
+                    text.contains("ping timeout", ignoreCase = true)
+            } } -> "pingTimeout"
+            chain.any { it is javax.net.ssl.SSLException || it is java.security.cert.CertificateException || it is CertificateFailure } -> "tls"
+            chain.any { it is java.net.ProtocolException } -> "protocol"
+            chain.any { it is java.io.EOFException } -> "eof"
+            chain.any { it is java.net.UnknownHostException } -> "dns"
+            chain.any { it is java.net.SocketTimeoutException } -> "timeout"
+            mentions("connection reset", "ECONNRESET") -> "connectionReset"
+            mentions("connection aborted", "ECONNABORTED", "software caused connection abort") -> "connectionAborted"
+            mentions("socket closed", "socket is closed", "closed socket") -> "socketClosed"
+            mentions("broken pipe", "EPIPE") -> "brokenPipe"
+            mentions("network is unreachable", "network unreachable", "ENETUNREACH", "no route to host", "EHOSTUNREACH") -> "networkUnreachable"
+            chain.any { it is java.net.ConnectException } -> "connect"
+            chain.any { it is java.net.SocketException } -> "socket"
+            chain.any { it is kotlinx.coroutines.CancellationException } -> "cancelled"
+            chain.any { it is java.io.IOException } -> "io"
+            else -> "other"
+        }
+        return json("class" to className(cause), "causeClasses" to JSONArray(chain.map(::className)),
+            "category" to category, "elapsedMillis" to elapsedMillis)
+    }
+
+    private class PhaseTimings {
+        private val startedAt = System.nanoTime()
+        private var phaseStartedAt = startedAt
+        private var current: String? = "configuration"
+        private var finishedAt: Long? = null
+        private val durations = linkedMapOf<String, Long>()
+        @Synchronized fun begin(next: String) {
+            val now = System.nanoTime()
+            current?.let { durations[it] = durations.getOrDefault(it, 0L) + now - phaseStartedAt }
+            current = next; phaseStartedAt = now
+        }
+        @Synchronized fun finish() {
+            val now = System.nanoTime()
+            current?.let { durations[it] = durations.getOrDefault(it, 0L) + now - phaseStartedAt }
+            current = null; finishedAt = now
+        }
+        @Synchronized fun elapsedMillis(): Long = ((finishedAt ?: System.nanoTime()) - startedAt) / 1_000_000
+        @Synchronized fun json(): JSONObject {
+            val snapshot = durations.toMutableMap()
+            current?.let { snapshot[it] = snapshot.getOrDefault(it, 0L) + System.nanoTime() - phaseStartedAt }
+            return JSONObject().apply { snapshot.forEach { (phase, nanos) -> put(phase, nanos / 1_000_000) } }
+        }
+    }
+
     private class FrameCounts {
         val connections = AtomicInteger(); val opened = AtomicInteger(); val closed = AtomicInteger(); val failed = AtomicInteger()
         val incoming = AtomicInteger(); val outgoing = AtomicInteger(); val blocked = AtomicInteger()
         val snapshots = AtomicInteger(); val parts = AtomicInteger(); val events = AtomicInteger(); val fragments = AtomicInteger()
+        val partChars = AtomicLong(); val maxPartChars = AtomicInteger(); val lastCloseCode = AtomicInteger(-1)
         val responses = AtomicInteger(); val rejectedResponses = AtomicInteger()
         val auth = AtomicInteger(); val device = AtomicInteger(); val subscriptions = AtomicInteger(); val historyRequests = AtomicInteger()
         val statusRequests = AtomicInteger(); val acks = AtomicInteger(); val cancels = AtomicInteger()
+        val lastFailure = AtomicReference<JSONObject?>()
+        private val incomingTypes = ConcurrentHashMap<String, AtomicInteger>()
+        private val malformedIncoming = AtomicInteger(); private val unknownIncoming = AtomicInteger()
+        private val knownIncomingTypes = setOf("ready", "devices", "response", "connection.error",
+            "session.snapshot", "session.history.part", "session.event", "session.fragment", "session.updated", "session.deleted",
+            "account.state", "web.settings.state", "usage.summary", "usage.page")
+        fun recordIncoming(type: String?) {
+            when {
+                type == null -> malformedIncoming.incrementAndGet()
+                type in knownIncomingTypes -> incomingTypes.getOrPut(type) { AtomicInteger() }.incrementAndGet()
+                else -> unknownIncoming.incrementAndGet()
+            }
+        }
         fun json() = json("connections" to connections.get(), "opened" to opened.get(), "closed" to closed.get(), "failed" to failed.get(),
             "incoming" to incoming.get(), "outgoing" to outgoing.get(), "blocked" to blocked.get(), "snapshots" to snapshots.get(),
-            "parts" to parts.get(), "events" to events.get(), "fragments" to fragments.get(), "responses" to responses.get(),
+            "parts" to parts.get(), "partChars" to partChars.get(), "maxPartChars" to maxPartChars.get(),
+            "lastCloseCode" to lastCloseCode.get().takeIf { it >= 0 },
+            "events" to events.get(), "fragments" to fragments.get(), "responses" to responses.get(),
             "rejectedResponses" to rejectedResponses.get(), "auth" to auth.get(), "device" to device.get(),
             "subscriptions" to subscriptions.get(), "historyRequests" to historyRequests.get(), "statusRequests" to statusRequests.get(),
-            "acks" to acks.get(), "cancels" to cancels.get())
+            "acks" to acks.get(), "cancels" to cancels.get(),
+            "incomingTypes" to JSONObject().apply { incomingTypes.toSortedMap().forEach { (type, count) -> put(type, count.get()) } },
+            "malformedIncoming" to malformedIncoming.get(), "unknownIncoming" to unknownIncoming.get())
     }
 
     /** Nothing written by these transports reaches the application's persisted preferences. */
