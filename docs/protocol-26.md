@@ -7,7 +7,7 @@
 | Android 构建 | 协议 | 对应上游服务端 | 状态 |
 | --- | --- | --- | --- |
 | GitHub 公开下载的 `v1.0.4-native` | 25 | `v0.3.14` | 已发布的公开测试 APK；原下载链接与校验值保持不变 |
-| `1.0.5-native` / versionCode 11 | 26 | `v0.3.15` | 本轮公开预发布目标；[Release 与附件](https://github.com/tuolola/cc-android-tunnel/releases/tag/v1.0.5-native)，构建与验证见文末 |
+| `1.0.5-native` / versionCode 11 | 26 | `v0.3.15` | 已发布的公开测试版；[Release 与附件](https://github.com/tuolola/cc-android-tunnel/releases/tag/v1.0.5-native)，构建与验证见文末 |
 
 上游 v0.3.15 的桌面客户端、`ccdt` 和服务端需配套升级。Android 的 `1.0.x-native` 是独立版本号，不能仅凭名称判断协议兼容。服务端明确拒绝协议不匹配的连接并以 WebSocket `4002` 关闭；本次适配不意味着同时兼容协议 25，也不意味着现有服务器已升级。[发布说明](https://github.com/sun168567/cc-desk-tunnel/releases/tag/v0.3.15)、[服务端检查](https://github.com/sun168567/cc-desk-tunnel/blob/v0.3.15/apps/server/src/server.ts#L1834)
 
@@ -107,7 +107,7 @@ README 的部署教程现对应 `v1.0.5-native` 与上游 v0.3.15，已核对该
 | 最终界面与交互 | 25 项真机交互通过（侧栏 2、流式滚动 3、聊天 7、原生输入框 7、手势 6），覆盖侧栏 30/60/65 条本地追加与搜索、IME/大字输入、模型与审批、滚动、途中反向拖动和退出阻断。浅色与深色各 14 个状态截图测试通过；人工复看两主题聊天与侧栏，确认原胶囊输入框、圆形发送按钮和简单全宽选中行已恢复，未见裁切或旧样式残留 |
 | 真实已配置服务只读检查 | 返回 **`protocolMismatch`**；VPS 须先同步到 v0.3.15 / 协议 26，当前尚未通过真实历史、分页或恢复联调 |
 
-交互用例日志保存在本地忽略目录 `.tmp/protocol-26-review`。已核对手机安装版本为 `1.0.5-native` / versionCode 11，安装后的 `base.apk` SHA-256 与下方交付包完全一致。深色截图为测试内局部主题，系统保持浅色；正式系统主题切换及状态栏效果未单独验收。匿名附件下载校验与旧版 App 更新安装链路未验收，发布后单独记录。
+交互用例日志保存在本地忽略目录 `.tmp/protocol-26-review`。已核对手机安装版本为 `1.0.5-native` / versionCode 11，安装后的 `base.apk` SHA-256 与下方交付包完全一致。深色截图为测试内局部主题，系统保持浅色；正式系统主题切换及状态栏效果未单独验收。发布后匿名下载与校验文件核对通过；真机公开更新源测试读取到 v1.0.5-native 及 APK 校验元数据。旧版 App 经浏览器下载和系统安装的完整升级链路未重跑。
 
 真实服务检查使用显式 `runLive=true` 的 [ConfiguredProtocol26ReadOnlyTest](../app/src/androidTest/java/dev/ccdesk/nativeapp/core/ConfiguredProtocol26ReadOnlyTest.kt)：凭据仅写内存隔离上下文、沿用原设备 ID，并通过出站白名单禁止消息发送、会话创建/删除和权限设置。报告仅包含固定状态、版本/协议与计数；本轮没有升级现有 VPS。
 
