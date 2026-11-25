@@ -39,6 +39,8 @@
 
 **Compatibility:** the current source build, **1.0.7-native** (versionCode 13), uses **protocol 29** with upstream **v0.3.19** or **v0.3.18**. The linked public APK, **v1.0.6-native**, uses **protocol 26** with upstream **v0.3.15**. See the [protocol 29 notes (Chinese)](./docs/protocol-29.md).
 
+**The protocol 29 prerelease is available.** Its APK uses a separate debug signing certificate and is intended for devices without CCtunnel installed. Updating an existing public installation requires an APK signed with the original certificate. [Release notes](https://github.com/tuolola/cc-android-tunnel/releases/tag/v1.0.7-native) · [Download the clean-install APK](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.7-native/CCtunnel-1.0.7-native-clean-install.apk) · [SHA-256 checksums](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.7-native/SHA256SUMS.txt)
+
 **Public 1.0.4-native compatibility note (versionCode 10):** This version supports only direct WSS service connections. HTTPS workbench login and the connection-mode switch have been removed. Old HTTPS addresses are not converted automatically: enter the complete WSS service address and credential supplied by your administrator. Existing WSS connections retain the credentials and certificate fingerprints saved for their addresses.
 
 First, a big thank-you to [sun168567](https://github.com/sun168567) and everyone contributing to [cc-desk-tunnel](https://github.com/sun168567/cc-desk-tunnel) for building something so useful and sharing it as open source. This Android version builds on their work, with a simple aim: let you pick up your phone and keep going when you're away from your computer. If you find it useful, consider giving the upstream project a star and showing its creators some support!
@@ -214,7 +216,7 @@ Keep the three credentials separate: **SSH key/password** manages the VPS; **ser
 
 ### 6. Install CCtunnel on Android
 
-**For the v0.3.19 server used in this tutorial**, build the protocol 29 APK from the current source using the instructions below. The public download in this section is for an existing v0.3.15 deployment.
+**For the v0.3.19 server used in this tutorial**, install the v1.0.7-native prerelease on a new device or follow the source build instructions below. The v1.0.6-native download is for an existing v0.3.15 deployment. [v1.0.7-native prerelease](https://github.com/tuolola/cc-android-tunnel/releases/tag/v1.0.7-native)
 
 Download [CCtunnel.apk (v1.0.6-native)](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.6-native/CCtunnel.apk) for **Android 7.0 or newer**. This is a **Debug-signed public preview** (versionCode 12). Read the [release notes](https://github.com/tuolola/cc-android-tunnel/releases/tag/v1.0.6-native) and download the [SHA256SUMS.txt checksum list](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.6-native/SHA256SUMS.txt).
 

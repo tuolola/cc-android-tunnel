@@ -4,7 +4,7 @@ Android 源码构建 `1.0.7-native`（versionCode 13）以 [cc-desk-tunnel v0.3.
 
 | Android 构建 | 协议 | 上游服务端 |
 | --- | --- | --- |
-| `1.0.7-native` 源码构建 | 29 | `v0.3.19`、`v0.3.18` |
+| `1.0.7-native` 源码构建与公开新装测试 APK | 29 | `v0.3.19`、`v0.3.18` |
 | 公开 `v1.0.6-native` APK | 26 | `v0.3.15` |
 
 ## Android 行为
@@ -23,3 +23,7 @@ Android 通过 WSS 以 `tunnel=false` 连接。会话历史缓存在当前进程
 - Android Lint 共 0 个错误、43 条警告。生产源码与 APK 原生边界审计通过，审计脚本的 8 项回归测试通过。
 - Debug APK 和仪器测试 APK 已构建。真机交互及真实 v0.3.19 服务联调待验证。
 - 本地 `artifacts/CCtunnel.apk` 的 SHA-256 为 `f7865c99eb3a3c63c72523e0fc761eb9f2aef95f9f5a9b1af1927e26878d234e`。该包使用本机构建生成的调试证书。覆盖安装公开版需要使用公开版的签名证书。
+
+## 公开发布验证
+
+`v1.0.7-native` 测试版标签指向构建提交 `88bf92f5b9913051933bab5fcb84b6894549ba5e`。匿名下载的 `CCtunnel-1.0.7-native-clean-install.apk` 与 `SHA256SUMS.txt` 核对一致。新装附件采用独立文件名，旧版 App 的覆盖更新只识别 `CCtunnel.apk`。[公开 Release](https://github.com/tuolola/cc-android-tunnel/releases/tag/v1.0.7-native)

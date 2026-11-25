@@ -1,12 +1,14 @@
 # App 更新与版本发布
 
+**1.0.7-native 新装测试版：** 使用协议 29，对应上游 v0.3.19 或 v0.3.18。新装 APK 使用另一张调试证书，因此以 `CCtunnel-1.0.7-native-clean-install.apk` 独立发布。App 更新入口只识别用于覆盖更新的 `CCtunnel.apk`。[发布说明](https://github.com/tuolola/cc-android-tunnel/releases/tag/v1.0.7-native) · [协议 29 适配记录](protocol-29.md)
+
 **1.0.6-native 协议兼容性：** 本版使用协议 **26**，需要上游 **cc-desk-tunnel v0.3.15**，上游电脑客户端与服务端也需配套。旧公开 `v1.0.4-native` 使用协议 **25**，对应上游 v0.3.14；单独安装新 Android APK 不会升级服务端。分块历史、取消、超时和验证范围见[协议 26 适配记录](protocol-26.md)。
 
 **1.0.4-native 连接兼容性：** 本版移除 HTTPS 网页登录，仅支持完整的 `wss://主机[:端口]/ws` 服务地址与服务凭据。旧 HTTPS 地址和对应登录状态不会自动迁移；升级后请使用管理员提供的 WSS 地址和凭据。已有 WSS 加密凭据保持兼容，新传输不读取或发送旧网页登录 Cookie。
 
 App 更新从 **`1.0.2-native`（versionCode 8）**开始提供。旧版 `v1.0.1-native` APK 没有更新检查功能，需要先手动安装本版；仅更新 GitHub 仓库不会给旧 APK 增加功能。
 
-当前版本 **`1.0.6-native`（versionCode 12）**为 Android 7.0 及以上的 **Debug 签名公开测试版**：[下载 CCtunnel.apk](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.6-native/CCtunnel.apk) · [发布说明](https://github.com/tuolola/cc-android-tunnel/releases/tag/v1.0.6-native) · [SHA256SUMS.txt](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.6-native/SHA256SUMS.txt)。APK 大小为 **13,628,957 字节**，SHA-256：
+沿用公开版签名的 **`1.0.6-native`（versionCode 12）**为 Android 7.0 及以上的 **Debug 签名测试版**：[下载 CCtunnel.apk](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.6-native/CCtunnel.apk) · [发布说明](https://github.com/tuolola/cc-android-tunnel/releases/tag/v1.0.6-native) · [SHA256SUMS.txt](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.6-native/SHA256SUMS.txt)。APK 大小为 **13,628,957 字节**，SHA-256：
 
 ```text
 539891255c66b5297bed16e849d9e9446d05c5107515e9b3affe0abd430eb30e

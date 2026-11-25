@@ -39,6 +39,8 @@
 
 **版本兼容：** 当前源码构建 **1.0.7-native**（versionCode 13）使用**协议 29**，对应上游 **v0.3.19** 和 **v0.3.18**。上方公开 APK **v1.0.6-native** 使用**协议 26**，对应上游 **v0.3.15**。详见[协议 29 适配记录](./docs/protocol-29.md)。
 
+**协议 29 测试版已发布。** `v1.0.7-native` 的 APK 使用另一张调试证书，适用于尚未安装 CCtunnel 的设备。覆盖安装公开旧版需要原签名构建。[发布说明](https://github.com/tuolola/cc-android-tunnel/releases/tag/v1.0.7-native) · [下载新装 APK](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.7-native/CCtunnel-1.0.7-native-clean-install.apk) · [SHA-256 校验文件](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.7-native/SHA256SUMS.txt)
+
 **公开版 1.0.4-native 兼容提示（versionCode 10）：** 本版只提供 WSS 服务直连，已移除 HTTPS 工作台登录及模式切换。旧 HTTPS 地址不会自动转换，请重新填写管理员提供的完整 WSS 服务地址和服务凭据；原有 WSS 连接继续使用对应地址已保存的凭据与证书指纹。
 
 先感谢一下原作者 [sun168567](https://github.com/sun168567) 和 [cc-desk-tunnel](https://github.com/sun168567/cc-desk-tunnel) 的贡献者们，把这么实用的项目做出来，还愿意开源分享。有了上游的基础，才有了这个安卓版；这里做的事情，就是让大家离开电脑后，也能拿起手机接着用。原项目的功劳不能少，觉得好用的话，也欢迎去上游点个 Star，支持一下原作者！
@@ -255,7 +257,7 @@ sudo cc-desk-tunnel summary
 
 **操作位置：Android 手机；需要自行构建时在开发电脑操作。**
 
-**使用本教程的 v0.3.19 服务端时**，请按下文的源码构建步骤生成协议 29 的 APK。本节公开下载适用于仍在使用 v0.3.15 的部署。
+**使用本教程的 v0.3.19 服务端时**，新设备可下载安装 `v1.0.7-native` 新装测试包，也可以按下文的步骤从源码构建。下方 `v1.0.6-native` 下载适用于仍在使用 v0.3.15 的部署。[v1.0.7-native 测试包](https://github.com/tuolola/cc-android-tunnel/releases/tag/v1.0.7-native)
 
 1. [直接下载 CCtunnel.apk（v1.0.6-native）](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.6-native/CCtunnel.apk)。适用于 **Android 7.0 及以上**，当前为 **Debug 签名的公开测试版**（versionCode 12）。查看[版本发布说明](https://github.com/tuolola/cc-android-tunnel/releases/tag/v1.0.6-native)和 [SHA256SUMS.txt 校验清单](https://github.com/tuolola/cc-android-tunnel/releases/download/v1.0.6-native/SHA256SUMS.txt)。
 2. 核对 SHA-256 后将 APK 传到手机安装。也可以连接 USB 调试，在 APK 所在目录执行 `adb install -r .\CCtunnel.apk`。已有应用须同包名、同签名且版本允许更新，才能覆盖安装。
