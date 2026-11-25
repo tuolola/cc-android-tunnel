@@ -11,8 +11,8 @@ android {
         applicationId = "dev.ccdesk.nativeapp"
         minSdk = 24
         targetSdk = 36
-        versionCode = 12
-        versionName = "1.0.6-native"
+        versionCode = 13
+        versionName = "1.0.7-native"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildTypes {

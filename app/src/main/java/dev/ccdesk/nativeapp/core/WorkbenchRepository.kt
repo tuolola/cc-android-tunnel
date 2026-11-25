@@ -25,19 +25,20 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.util.UUID
 
-const val PROTOCOL_VERSION = 26
+const val PROTOCOL_VERSION = 29
 private val historyCommands = setOf("session.subscribe", "session.history")
 private val allowed = setOf("server.session.create","session.subscribe","session.history","session.status","session.stats",
     "session.rename","session.delete","session.configure","session.compact","message.send","run.cancel","run.continue",
     "run.task.stop","run.task.background","approval.reply","usage.summary","usage.query","quota.watch","account.status",
-    "compaction.get","web.settings.get","web.settings.update","web.sessions.revoke","web.totp.setup","web.totp.enable","web.totp.disable")
+    "compaction.get","web.settings.get","web.settings.update","web.sessions.revoke","web.totp.setup","web.totp.enable","web.totp.disable",
+    "session.create","session.move","project.rename","project.remove")
 private fun validReady(frame: JSONObject): Boolean {
     val version = frame.opt("protocolVersion")
     return version is Number && version.toDouble() == PROTOCOL_VERSION.toDouble() &&
         (frame.isNull("browser") || frame.opt("browser") == false) && frame.optJSONArray("sessions") != null
 }
 
-/** Protocol 26 client. All state and callbacks are confined to [dispatcher]; IO lives in transport. */
+/** All state and callbacks are confined to [dispatcher]; IO lives in transport. */
 class WorkbenchRepository(private val transport: WorkbenchTransport, private val dispatcher: CoroutineDispatcher = Dispatchers.Main.immediate) {
     constructor(context: Context) : this(AndroidWorkbenchTransport(context.applicationContext))
     private val scope = CoroutineScope(SupervisorJob() + dispatcher)
@@ -65,6 +66,7 @@ class WorkbenchRepository(private val transport: WorkbenchTransport, private val
     private val historyRequestIds = linkedSetOf<String>()
     private val needsReload = mutableSetOf<String>()
     private val historyOwners = mutableMapOf<String,String>()
+    private var historyId: String? = null
     private data class Subscription(val sessionId: String, val requestId: String, val task: Deferred<Unit>)
     private var subscription: Subscription? = null
     private data class CatalogRead(val sessionId: String, val task: Deferred<Unit>)
@@ -74,7 +76,6 @@ class WorkbenchRepository(private val transport: WorkbenchTransport, private val
     private var writes: Job? = null
     private var preferenceLoaded = false
     private var quotaWanted = false
-    private var refreshingQuota = false
     private var sendInFlight = false
     private var draftRequestId: String? = null
     private fun patch(block: (WorkbenchState) -> WorkbenchState) { mutableState.value = block(current) }
@@ -92,7 +93,7 @@ class WorkbenchRepository(private val transport: WorkbenchTransport, private val
             if (it.type == "session.subscribe" && it.frame == null) it.sessionId?.let(needsReload::add)
             it.timeout?.cancel(); it.result.completeExceptionally(IllegalStateException("连接已中断，请恢复连接后核对操作结果。"))
         }
-        subscription = null; catalogReads.clear(); catalogAttempts.clear(); catalogPresenceKnown = false; refreshingQuota = false
+        subscription = null; catalogReads.clear(); catalogAttempts.clear(); catalogPresenceKnown = false
         historyOwners.clear()
         patch { it.copy(modelCatalogLoading = emptySet(), histories = it.histories.mapValues { (_, h) -> h.copy(loading = false,fragments = emptyList()) }) }
         return generation
@@ -123,6 +124,7 @@ class WorkbenchRepository(private val transport: WorkbenchTransport, private val
         if (endpoint == current.endpoint && endpoint.isNotEmpty() && prepare == null) { reconnect(); return }
         val ticket = stop(); retryCount = 0; quotaWanted = false; preferenceLoaded = false; draftRequestId = null
         needsReload.clear()
+        historyId = null
         historyRequestIds.clear()
         mutableState.value = WorkbenchState(endpoint = endpoint,status = if (endpoint.isEmpty()) "setup" else "connecting")
         val previous = writes
@@ -235,6 +237,10 @@ class WorkbenchRepository(private val transport: WorkbenchTransport, private val
     }
     private suspend fun sendCommand(type: String, fields: JSONObject, id: String): JSONObject {
         require(type in allowed) { "工作台不支持此操作。" }
+        val frame = JSONObject(fields.toString()).put("type",type).put("requestId",id).toString()
+        if (type == "approval.reply" && fields.has("plan")) {
+            require(frame.toByteArray(Charsets.UTF_8).size <= 256 * 1024) { "计划内容过长，请缩短后重试。" }
+        }
         if (type == "quota.watch") quotaWanted = fields.optBoolean("active")
         val connection = socket
         check(connection != null && current.status == "online") { "请等待工作台连接后重试。" }
@@ -247,8 +253,7 @@ class WorkbenchRepository(private val transport: WorkbenchTransport, private val
         }
         armTimeout(id,waiter)
         try {
-            val frame = JSONObject(fields.toString()).put("type",type).put("requestId",id)
-            check(connection.send(frame.toString())) { "实时连接已关闭。" }
+            check(connection.send(frame)) { "实时连接已关闭。" }
             return waiter.result.await()
         } finally {
             waiter.timeout?.cancel()
@@ -417,8 +422,20 @@ class WorkbenchRepository(private val transport: WorkbenchTransport, private val
                 if (!validReady(frame)) { disconnected("工作台协议版本不匹配，请核对服务端版本。",false); return }
                 handshake?.cancel(); handshake = null; retryCount = 0
                 val sessions = frame.getJSONArray("sessions").objects().map(Session::from)
-                val selected = current.selectedId?.takeIf { id -> sessions.any { it.id == id } }
-                patch { it.copy(status = "online",authenticated = true,error = null,version = frame.stringOrNull("version"),defaultModel = frame.stringOrNull("model"),sessions = sessions,selectedId = selected) }
+                val sessionIds = sessions.mapTo(mutableSetOf()) { it.id }
+                val catalogKeys = sessions.mapTo(mutableSetOf()) { it.device?.id ?: it.id }
+                val nextHistoryId = frame.stringOrNull("historyId")
+                val keepHistory = nextHistoryId != null && historyId == nextHistoryId
+                historyId = nextHistoryId
+                if (keepHistory) needsReload.retainAll(sessionIds) else needsReload.clear()
+                val selected = current.selectedId?.takeIf { it in sessionIds }
+                patch { it.copy(status = "online", authenticated = true, error = null,
+                    version = frame.stringOrNull("version"), defaultModel = frame.stringOrNull("model"),
+                    sessions = sessions, selectedId = selected, projects = frame.optJSONArray("projects").objects().map(Project::from),
+                    quota = frame.optJSONObject("quota"),
+                    histories = if (keepHistory) it.histories.filterKeys(sessionIds::contains) else emptyMap(),
+                    modelCatalogs = if (keepHistory) it.modelCatalogs.filterKeys(catalogKeys::contains) else emptyMap(),
+                    modelCatalogErrors = emptyMap()) }
                 preloadModelCatalogs()
                 if (selected != null) {
                     val ticket = generation
@@ -431,9 +448,18 @@ class WorkbenchRepository(private val transport: WorkbenchTransport, private val
                 if (quotaWanted) scope.launch { runCatching { command("quota.watch",json("active" to true)) } }
             }
             "devices" -> { val devices = frame.optJSONArray("devices").objects().map(Device::from); catalogPresenceKnown = true; patch { it.copy(devices = devices,serverDeviceId = devices.find { it.server }?.id ?: it.serverDeviceId) }; preloadModelCatalogs() }
+            "projects" -> {
+                val projects = frame.getJSONArray("projects").objects().map(Project::from)
+                patch { it.copy(projects = projects) }
+            }
+            "quota" -> patch { it.copy(quota = frame) }
             "session.updated" -> {
                 val session = Session.from(frame.getJSONObject("session")); val old = upsert(session); preloadModelCatalogs(); if (old == null) return; val run = session.activeRun
-                if (run?.status == "awaiting_approval" && (old.activeRun?.status != run.status || old.activeRun?.waiting != run.waiting)) notify("${run.id}:${run.waiting}:${session.updatedAt}",session.id,session.title,if (run.waiting == "question") "Claude 有一个问题等你回答" else "有工具操作等待审批")
+                if (run?.status == "awaiting_approval" && (old.activeRun?.status != run.status || old.activeRun?.waiting != run.waiting)) notify("${run.id}:${run.waiting}:${session.updatedAt}",session.id,session.title,when (run.waiting) {
+                    "question" -> "Claude 有一个问题等你回答"
+                    "plan" -> "Claude 有一份计划等待确认"
+                    else -> "有工具操作等待审批"
+                })
                 else if (run == null && old.activeRun != null) notify("${old.activeRun.id}:ended",session.id,session.title,"本轮运行已结束")
             }
             "session.deleted" -> {
@@ -447,6 +473,7 @@ class WorkbenchRepository(private val transport: WorkbenchTransport, private val
                 val session = Session.from(frame.getJSONObject("session"))
                 // Older pages must not roll current run/permission metadata back to their capture time.
                 if (frame.optString("mode") != "prepend" || current.sessions.none { it.id == session.id }) upsert(session)
+                if (frame.optBoolean("reset")) patch { it.copy(modelCatalogs = it.modelCatalogs - (session.device?.id ?: session.id)) }
                 frame.optJSONArray("events").objects().map(DeskEvent::from).findLast { it.payload.optString("type") == "native.capabilities" }?.let { cacheCatalog(session,it) }
                 if (frame.optString("mode") != "prepend") {
                     needsReload.remove(session.id)
@@ -462,7 +489,6 @@ class WorkbenchRepository(private val transport: WorkbenchTransport, private val
             "session.event" -> {
                 val event = DeskEvent.from(frame.getJSONObject("event")); val p = event.payload
                 current.sessions.find { it.id == event.sessionId }?.let { cacheCatalog(it,event) }
-                if (p.optString("type") == "native.metrics" && p.optJSONObject("rateLimits")?.optBoolean("available") == true && quotaWanted && !refreshingQuota) { refreshingQuota = true; val ticket = generation; scope.launch { try { command("usage.summary") } catch (_: Exception) {} finally { if (ticket == generation) refreshingQuota = false } } }
                 if (event.sessionId == openSession) updateHistory(event.sessionId) { addEvent(it,event) }
                 if (p.optString("type") == "run.status" && p.optString("status") in setOf("cancelled","failed","completed")) notify("${event.runId}:ended",event.sessionId,current.sessions.find { it.id == event.sessionId }?.title ?: "工作台",when(p.optString("status")) { "completed" -> "本轮运行已完成"; "failed" -> "本轮运行失败"; else -> "本轮运行已停止" })
             }
@@ -495,7 +521,7 @@ class WorkbenchRepository(private val transport: WorkbenchTransport, private val
             previous.task.cancel()
             updateHistory(previous.sessionId) { it.copy(loading = false) }
         }
-        val after = if (id in needsReload) 0 else current.histories[id]?.events?.lastOrNull()?.sequence ?: 0
+        val cursor = current.histories[id]?.events?.lastOrNull()?.takeIf { id !in needsReload && it.createdAt.isNotBlank() }
         openSession = null
         val ticket = generation
         val requestId = UUID.randomUUID().toString()
@@ -503,7 +529,9 @@ class WorkbenchRepository(private val transport: WorkbenchTransport, private val
         updateHistory(id) { it.copy(loading = true,loadError = null,fragments = emptyList()) }
         val read = scope.async(start = CoroutineStart.LAZY) {
             try {
-                val result = sendCommand("session.subscribe",json("sessionId" to id,"afterSequence" to after),requestId)
+                val fields = json("sessionId" to id, "afterSequence" to (cursor?.sequence ?: 0))
+                if (cursor != null) fields.put("afterCreatedAt", cursor.createdAt)
+                val result = sendCommand("session.subscribe",fields,requestId)
                 check(result.optString("type") == "session.snapshot") { "服务端未返回会话历史，请重新读取。" }
             } catch (e: Exception) {
                 if (e !is CancellationException && ticket == generation && subscription?.requestId == requestId && id in current.histories) updateHistory(id) { it.copy(loadError = message(e)) }
@@ -528,6 +556,23 @@ class WorkbenchRepository(private val transport: WorkbenchTransport, private val
         val id = result.stringOrNull("sessionId") ?: error("服务端没有返回新会话。")
         onCreated?.invoke(id)
         selectSession(id); id
+    }
+    suspend fun createProjectSession(project: Project, requestId: String): String = withContext(dispatcher) {
+        checkProjectOnline(project)
+        val result = sendCommand("session.create", json("title" to "新会话", "deviceId" to project.device.id, "projectPath" to project.path), requestId)
+        result.getString("sessionId")
+    }
+
+    suspend fun moveSessionToProject(sessionId: String, project: Project) = withContext(dispatcher) {
+        val session = current.sessions.find { it.id == sessionId } ?: error("这个会话已不存在。")
+        check(session.activeRun == null) { "请先结束当前运行。" }
+        checkProjectOnline(project)
+        command("session.move", json("sessionId" to sessionId, "deviceId" to project.device.id, "projectPath" to project.path))
+    }
+
+    private fun checkProjectOnline(project: Project) {
+        check(current.projects.any { it.device.id == project.device.id && it.root == project.root }) { "这个项目已不存在。" }
+        check(current.status == "online" && current.devices.any { it.id == project.device.id && it.ready == true }) { "项目所在电脑未就绪。" }
     }
     suspend fun loadEarlier(id: String) = withContext(dispatcher) {
         val history = current.histories[id] ?: return@withContext

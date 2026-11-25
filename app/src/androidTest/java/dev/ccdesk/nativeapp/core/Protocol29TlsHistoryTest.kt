@@ -33,11 +33,11 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
 
-/** Protocol 26 wire integration: real OkHttp/TLS, isolated preferences, no external service. */
+/** Protocol 29 wire integration: real OkHttp/TLS, isolated preferences, no external service. */
 @RunWith(AndroidJUnit4::class)
-class Protocol26TlsHistoryTest {
+class Protocol29TlsHistoryTest {
     private class IsolatedContext(base: Context) : ContextWrapper(base) {
-        private val prefix = "protocol26-tls-${UUID.randomUUID()}-"
+        private val prefix = "protocol29-tls-${UUID.randomUUID()}-"
         private val opened = ConcurrentHashMap<String, SharedPreferences>()
         override fun getSharedPreferences(name: String, mode: Int): SharedPreferences =
             super.getSharedPreferences(prefix + name, mode).also { opened[name] = it }
@@ -51,12 +51,12 @@ class Protocol26TlsHistoryTest {
     }
 
     private class Peer(private val pauseFirstSubscription: Boolean = false) : Closeable {
-        private val certificate = HeldCertificate.Builder().commonName("Protocol 26 fixture")
+        private val certificate = HeldCertificate.Builder().commonName("Protocol 29 fixture")
             .addSubjectAlternativeName("127.0.0.1").build()
         private val server = MockWebServer()
         val fingerprint = MessageDigest.getInstance("SHA-256").digest(certificate.certificate.encoded)
             .joinToString("") { "%02X".format(it) }
-        val token = "protocol26-local-fixture-token-0123456789"
+        val token = "protocol29-local-fixture-token-0123456789"
         val endpoint get() = "wss://127.0.0.1:${server.port}/ws"
         val observed = MutableStateFlow<List<Observed>>(emptyList())
         val connections = AtomicInteger()
@@ -89,10 +89,10 @@ class Protocol26TlsHistoryTest {
                     observed.update { it + Observed(connection, frame) }
                     when (frame.optString("type")) {
                         "auth" -> {
-                            if (frame.optInt("protocolVersion") != 26 || frame.optString("token") != token || frame.optBoolean("tunnel", true)) {
+                            if (frame.optInt("protocolVersion") != 29 || frame.optString("token") != token || frame.optBoolean("tunnel", true)) {
                                 webSocket.close(4001, "Fixture authentication rejected"); return
                             }
-                            send(webSocket, json("type" to "ready", "protocolVersion" to 26,
+                            send(webSocket, json("type" to "ready", "protocolVersion" to 29,
                                 "sessions" to JSONArray().put(session("one")).put(session("two"))))
                             send(webSocket, json("type" to "devices", "devices" to JSONArray().put(json("id" to "fixture-server", "server" to true, "ready" to true))))
                         }

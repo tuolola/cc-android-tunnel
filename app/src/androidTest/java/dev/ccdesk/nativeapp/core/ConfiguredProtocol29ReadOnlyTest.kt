@@ -25,7 +25,7 @@ import java.util.concurrent.atomic.AtomicReference
 
 /** Opt-in verification of the configured service. No business writes or user data in reports. */
 @RunWith(AndroidJUnit4::class)
-class ConfiguredProtocol26ReadOnlyTest {
+class ConfiguredProtocol29ReadOnlyTest {
     @Test fun configuredServiceLoadsExistingHistoryAndKeepsItsConnection() = runBlocking<Unit> {
         val arguments = InstrumentationRegistry.getArguments()
         assumeTrue("Requires -e runLive true", arguments.getString("runLive") == "true")
@@ -46,7 +46,7 @@ class ConfiguredProtocol26ReadOnlyTest {
         val report = json("status" to "running", "clientProtocol" to PROTOCOL_VERSION, "requireEarlier" to requireEarlier,
             "historyLoaded" to false, "earlierPageStatus" to "notChecked",
             "foregroundStatus" to "notChecked", "cleanupComplete" to false)
-        val reportFile = context.cacheDir.resolve("protocol26-live-readonly.json")
+        val reportFile = context.cacheDir.resolve("protocol29-live-readonly.json")
         fun save() {
             report.put("serviceProtocol", readyProtocol.get().takeIf { it > 0 } ?: JSONObject.NULL)
                 .put("serviceVersion", serviceVersion.get() ?: JSONObject.NULL)
@@ -115,7 +115,7 @@ class ConfiguredProtocol26ReadOnlyTest {
                         val frame = runCatching { JSONObject(text) }.getOrNull()
                         val type = frame?.optString("type")
                         val permitted = frame != null && when (type) {
-                            "auth" -> frame.optInt("protocolVersion") == 26 && !frame.optBoolean("tunnel", true)
+                            "auth" -> frame.optInt("protocolVersion") == 29 && !frame.optBoolean("tunnel", true)
                             "device" -> frame.optString("id") == identity
                             "session.subscribe", "session.history", "session.status" -> frame.optString("sessionId") in existingSessions
                             "session.history.next", "session.history.cancel" -> true
@@ -162,7 +162,7 @@ class ConfiguredProtocol26ReadOnlyTest {
                 repository.state.first { it.status == "online" || it.status == "offline" || it.status == "setup" }
             }
             if (connected.status != "online") stop(if (protocolMismatch()) "protocolMismatch" else "offline")
-            if (readyProtocol.get() != 26) stop("protocolMismatch")
+            if (readyProtocol.get() != 29) stop("protocolMismatch")
             report.put("status", "online").put("sessionCount", connected.sessions.size)
             save()
 
@@ -226,7 +226,7 @@ class ConfiguredProtocol26ReadOnlyTest {
                 stage == "connection" || repository.state.value.status == "offline" -> "offline"
                 else -> "failed"
             }
-            failure = "Configured protocol 26 read-only verification did not pass ($status)."
+            failure = "Configured protocol 29 read-only verification did not pass ($status)."
             report.put("status", status).put("failedStage", stage)
             save()
         } finally {
@@ -243,7 +243,7 @@ class ConfiguredProtocol26ReadOnlyTest {
                 report.put("cleanupComplete", clean)
                 if (!clean) {
                     report.put("status", "cleanupFailed")
-                    failure = "Configured protocol 26 read-only verification cleanup did not complete."
+                    failure = "Configured protocol 29 read-only verification cleanup did not complete."
                 }
                 timings.finish()
                 save()
@@ -324,7 +324,7 @@ class ConfiguredProtocol26ReadOnlyTest {
         private val malformedIncoming = AtomicInteger(); private val unknownIncoming = AtomicInteger()
         private val knownIncomingTypes = setOf("ready", "devices", "response", "connection.error",
             "session.snapshot", "session.history.part", "session.event", "session.fragment", "session.updated", "session.deleted",
-            "account.state", "web.settings.state", "usage.summary", "usage.page")
+            "account.state", "web.settings.state", "usage.summary", "usage.page", "projects", "quota")
         fun recordIncoming(type: String?) {
             when {
                 type == null -> malformedIncoming.incrementAndGet()

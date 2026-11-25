@@ -27,9 +27,24 @@ data class ActiveRun(val id: String, val status: String, val connectionId: Strin
 }
 data class Session(val id: String, val title: String = "新会话", val projectPath: String = "", val device: Device? = null,
     val createdAt: String = "", val updatedAt: String = "", val permissionMode: String = "", val model: String? = null,
-    val effort: String? = null, val activeRun: ActiveRun? = null) {
-    companion object { fun from(o: JSONObject) = Session(o.getString("id"),o.optString("title","新会话"),o.optString("projectPath"),o.optJSONObject("device")?.let(Device::from),o.optString("createdAt"),o.optString("updatedAt"),o.optString("permissionMode"),o.stringOrNull("model"),o.stringOrNull("effort"),o.optJSONObject("activeRun")?.let(ActiveRun::from)) }
+    val effort: String? = null, val activeRun: ActiveRun? = null, val modeBeforePlan: String? = null) {
+    companion object { fun from(o: JSONObject) = Session(o.getString("id"),o.optString("title","新会话"),o.optString("projectPath"),o.optJSONObject("device")?.let(Device::from),o.optString("createdAt"),o.optString("updatedAt"),o.optString("permissionMode"),o.stringOrNull("model"),o.stringOrNull("effort"),o.optJSONObject("activeRun")?.let(ActiveRun::from),o.stringOrNull("modeBeforePlan")) }
 }
+data class Project(val device: Device, val path: String, val root: String, val name: String? = null) {
+    val label: String get() = name ?: (if (isWindowsPath(path)) path.replace('\\', '/') else path)
+        .trimEnd('/').substringAfterLast('/').ifEmpty { path }
+
+    companion object {
+        fun from(o: JSONObject) = Project(Device.from(o.getJSONObject("device")), o.getString("path"), o.getString("root"), o.stringOrNull("name"))
+    }
+}
+
+private fun isWindowsPath(path: String) = path.startsWith("\\\\") ||
+    (path.length >= 3 && (path[0] in 'A'..'Z' || path[0] in 'a'..'z') && path[1] == ':' && path[2] in "/\\")
+
+internal fun projectPathKey(path: String): String = if (isWindowsPath(path)) {
+    path.replace('/', '\\').trimEnd('\\').lowercase(Locale.ROOT)
+} else path.trimEnd('/').ifEmpty { "/" }
 data class ModelInfo(val value: String, val displayName: String, val supportedEffortLevels: List<String> = emptyList(), val description: String? = null, val resolvedModel: String? = null, val source: String? = null) {
     companion object { fun from(o: JSONObject) = ModelInfo(o.getString("value"),o.optString("displayName"),o.optJSONArray("supportedEffortLevels").strings(),o.stringOrNull("description"),o.stringOrNull("resolvedModel"),o.stringOrNull("source")) }
 }
@@ -49,7 +64,8 @@ data class WorkbenchState(val status: String = "loading", val endpoint: String =
     val modelCatalogs: Map<String,Catalog> = emptyMap(), val pins: List<String> = emptyList(), val notices: List<Notice> = emptyList(),
     val account: JSONObject? = null, val webSettings: JSONObject? = null, val usageSummary: JSONObject? = null, val usagePage: JSONObject? = null,
     val localDeviceId: String? = null,
-    val modelCatalogLoading: Set<String> = emptySet(), val modelCatalogErrors: Map<String,String> = emptyMap())
+    val modelCatalogLoading: Set<String> = emptySet(), val modelCatalogErrors: Map<String,String> = emptyMap(),
+    val projects: List<Project> = emptyList(), val quota: JSONObject? = null)
 data class Preferences(val pins: List<String> = emptyList(), val notices: List<Notice> = emptyList())
 
 private fun fragmentKey(p: JSONObject) = listOf(p.optString("type"), p.stringOrNull("messageId") ?: p.stringOrNull("toolId") ?: p.stringOrNull("taskId") ?: "", p.optString("stream")).joinToString("/")
@@ -72,7 +88,7 @@ fun addEvent(history: History, event: DeskEvent): History {
     return history.copy(events = events, fragments = history.fragments.filter { it.runId != event.runId || (!settled && fragmentKey(it.payload) != fragmentKey(event.payload)) })
 }
 fun applySnapshot(history: History, frame: JSONObject): History {
-    val mode = frame.optString("mode")
+    val mode = if (frame.optBoolean("reset")) "replace" else frame.optString("mode")
     val events = (if (mode == "replace") emptyList() else history.events) + frame.optJSONArray("events").objects().map(DeskEvent::from)
     return History(events.associateBy { it.sequence }.values.sortedBy { it.sequence }, if (mode == "prepend") history.fragments else emptyList(), if (mode == "append") history.hasEarlier else frame.optBoolean("hasEarlier"), loaded = true)
 }

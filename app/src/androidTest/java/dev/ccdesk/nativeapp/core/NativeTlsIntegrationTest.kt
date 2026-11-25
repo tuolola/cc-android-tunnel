@@ -106,9 +106,9 @@ class NativeTlsIntegrationTest {
                     frames.update { it + ObservedFrame(connection,frame) }
                     when (frame.optString("type")) {
                         "auth" -> {
-                            val valid = frame.optInt("protocolVersion") == 26 && frame.optString("token") == serviceToken && !frame.optBoolean("tunnel",true)
+                            val valid = frame.optInt("protocolVersion") == 29 && frame.optString("token") == serviceToken && !frame.optBoolean("tunnel",true)
                             if (!valid) { webSocket.close(4001,"Invalid fixture authentication"); return }
-                            val ready = json("type" to "ready","protocolVersion" to 26,"version" to "instrumentation-fixture","sessions" to JSONArray().put(session()))
+                            val ready = json("type" to "ready","protocolVersion" to 29,"version" to "instrumentation-fixture","sessions" to JSONArray().put(session()))
                             webSocket.send(ready.toString())
                             webSocket.send(json("type" to "devices","devices" to JSONArray().put(json("id" to "fixture-server","name" to "Fixture server","server" to true,"ready" to true))).toString())
                         }
@@ -207,7 +207,7 @@ class NativeTlsIntegrationTest {
             awaitState(repo) { it.status == "online" }
             stage = "initial authentication and device identity"
             val auth = fixture.frame("auth",1)
-            assertEquals(26,auth.getInt("protocolVersion")); assertEquals(fixture.serviceToken,auth.getString("token")); assertFalse(auth.getBoolean("tunnel"))
+            assertEquals(29,auth.getInt("protocolVersion")); assertEquals(fixture.serviceToken,auth.getString("token")); assertFalse(auth.getBoolean("tunnel"))
             assertEquals("CC Android Tunnel",auth.getString("deviceName"))
             val identity = fixture.frame("device",1).getString("id")
             assertTrue(identity.isNotBlank())

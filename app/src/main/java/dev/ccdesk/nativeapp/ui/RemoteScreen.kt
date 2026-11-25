@@ -32,9 +32,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.ccdesk.nativeapp.core.RemoteComputer
 import dev.ccdesk.nativeapp.core.RemoteComputerStatus
+import dev.ccdesk.nativeapp.core.Project
 import dev.ccdesk.nativeapp.core.Session
 import dev.ccdesk.nativeapp.core.WorkbenchRepository
+import dev.ccdesk.nativeapp.core.contains
+import dev.ccdesk.nativeapp.core.json
 import dev.ccdesk.nativeapp.core.remoteComputers
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
+import java.util.UUID
 
 /** A computer keeps its sessions here even when its execution channel goes offline. */
 @Composable
@@ -44,12 +50,34 @@ fun RemoteScreen(repository: WorkbenchRepository, onNavigate: (String) -> Unit, 
     val c = LocalDeskColors.current
     var query by rememberSaveable(state.endpoint) { mutableStateOf("") }
     var menu by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    var projectMenu by remember(state.endpoint) { mutableStateOf<Project?>(null) }
+    var projectAction by remember { mutableStateOf("") }
+    var projectName by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf("") }
+    val creationRequests = remember(state.endpoint) { mutableMapOf<Pair<String, String>, String>() }
     val collapsed = remember(state.endpoint) { mutableStateMapOf<String, Boolean>() }
-    val allComputers = remember(state.sessions, state.devices, state.serverDeviceId, state.localDeviceId, state.status, state.pins) { remoteComputers(state) }
-    val computers = remember(state.sessions, state.devices, state.serverDeviceId, state.localDeviceId, state.status, state.pins, query) {
-        remoteComputers(state, query)
+    val allComputers = remember(state.sessions, state.projects, state.devices, state.serverDeviceId, state.localDeviceId, state.status, state.pins) { remoteComputers(state) }
+    val computers = if (query.isBlank()) allComputers else remember(allComputers, query) { remoteComputers(state, query) }
+    fun perform(action: suspend () -> Unit) {
+        if (busy) return
+        busy = true
+        error = ""
+        scope.launch {
+            try { action() }
+            catch (e: CancellationException) { throw e }
+            catch (e: Exception) { error = e.message ?: "项目操作失败。" }
+            finally { busy = false }
+        }
     }
-    BackHandler(enabled = active) { if (menu) menu = false else onClose() }
+    BackHandler(enabled = active) {
+        if (!busy) when {
+            projectMenu != null -> projectMenu = null
+            menu -> menu = false
+            else -> onClose()
+        }
+    }
     Box(Modifier.fillMaxSize().then(AbsorbPointerInput).background(c.background).safeDrawingPadding()) {
         Column(Modifier.widthIn(max = 768.dp).fillMaxSize().align(Alignment.TopCenter)) {
             Row(Modifier.fillMaxWidth().heightIn(min = 68.dp).padding(horizontal = 14.dp),
@@ -72,6 +100,7 @@ fun RemoteScreen(repository: WorkbenchRepository, onNavigate: (String) -> Unit, 
                     decorationBox = { inner -> Box { if (query.isEmpty()) DeskText("查找电脑或会话", size = 16, color = c.mutedForeground); inner() } })
                 if (query.isNotEmpty()) DeskIconButton("x", "清除远程控制搜索", iconSize = 17.dp) { query = "" }
             }
+            if (error.isNotBlank() && projectMenu == null) DeskText(error, Modifier.padding(horizontal = 16.dp, vertical = 8.dp), color = c.foreground, size = 14)
             if (state.status != "online" && computers.isNotEmpty()) {
                 Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp))
                     .background(c.muted).deskPressable(c.accent, 16.dp) { onNavigate("connection") }
@@ -98,7 +127,17 @@ fun RemoteScreen(repository: WorkbenchRepository, onNavigate: (String) -> Unit, 
                             RemoteComputerCard(computer, expanded = collapsed[computer.device.id] != true || query.isNotBlank(),
                                 selectedId = state.selectedId, pins = state.pins,
                                 onToggle = { collapsed[computer.device.id] = collapsed[computer.device.id] != true },
-                                onOpen = { repository.openSession(it.id); onClose() })
+                                onOpen = { repository.openSession(it.id); onClose() },
+                                onCreate = { project -> perform {
+                                    val key = project.device.id to project.root
+                                    val requestId = creationRequests.getOrPut(key) { UUID.randomUUID().toString() }
+                                    val id = repository.createProjectSession(project, requestId)
+                                    creationRequests.remove(key)
+                                    repository.openSession(id)
+                                    onClose()
+                                } },
+                                onProject = { project -> projectMenu = project; projectAction = ""; projectName = project.name.orEmpty(); error = "" },
+                                workbenchOnline = state.status == "online", busy = busy)
                         }
                     }
                 }
@@ -110,6 +149,36 @@ fun RemoteScreen(repository: WorkbenchRepository, onNavigate: (String) -> Unit, 
             DeskText("远程控制", size = 20, weight = FontWeight.SemiBold)
             RemoteMenuRow("连接设置", "link-2") { menu = false; onNavigate("connection") }
             RemoteMenuRow("使用帮助", "circle-help") { menu = false; onNavigate("help") }
+        }
+    }
+    val closeProjectMenu = { if (!busy) projectMenu = null }
+    DeskSheetOverlay(projectMenu != null, closeProjectMenu, dismissible = !busy, scrimLabel = "关闭项目选项") {
+        projectMenu?.let { project ->
+            Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                DeskText(project.label, size = 20, weight = FontWeight.SemiBold)
+                DeskText(project.path, size = 13, color = c.mutedForeground)
+                when (projectAction) {
+                    "rename" -> {
+                        DeskField(projectName, { projectName = it }, "项目名称（留空使用文件夹名称）", Modifier.fillMaxWidth(), enabled = !busy, maxLength = 60)
+                        DeskAction("保存名称", !busy && state.status == "online", primary = true, loading = busy) { perform {
+                            repository.command("project.rename", json("deviceId" to project.device.id, "path" to project.path, "name" to projectName.trim()))
+                            projectMenu = null
+                        } }
+                    }
+                    "remove" -> {
+                        DeskText("移除后，这个项目的会话会保留为普通会话，文件夹也会保留。", size = 14, lineHeight = 20)
+                        DeskAction("确认移除项目", !busy && state.status == "online", loading = busy) { perform {
+                            repository.command("project.remove", json("deviceId" to project.device.id, "path" to project.path))
+                            projectMenu = null
+                        } }
+                    }
+                    else -> {
+                        RemoteMenuRow("重命名项目", "pencil") { projectAction = "rename" }
+                        RemoteMenuRow("移除项目", "trash-2") { projectAction = "remove" }
+                    }
+                }
+                if (error.isNotBlank()) DeskText(error, size = 14)
+            }
         }
     }
 }
@@ -172,7 +241,9 @@ fun RemoteScreen(repository: WorkbenchRepository, onNavigate: (String) -> Unit, 
     }
 }
 
-@Composable private fun RemoteComputerCard(computer: RemoteComputer, expanded: Boolean, selectedId: String?, pins: List<String>, onToggle: () -> Unit, onOpen: (Session) -> Unit) {
+@Composable private fun RemoteComputerCard(computer: RemoteComputer, expanded: Boolean, selectedId: String?, pins: List<String>,
+    onToggle: () -> Unit, onOpen: (Session) -> Unit, onCreate: (Project) -> Unit, onProject: (Project) -> Unit,
+    workbenchOnline: Boolean, busy: Boolean) {
     val c = LocalDeskColors.current
     val statusLabel = when (computer.status) {
         RemoteComputerStatus.ONLINE -> "在线"
@@ -207,24 +278,42 @@ fun RemoteScreen(repository: WorkbenchRepository, onNavigate: (String) -> Unit, 
             Column(Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp)) {
                 Box(Modifier.fillMaxWidth().padding(horizontal = 6.dp).height(1.dp).background(c.border))
                 if (offlineHistory) DeskText(if (computer.status == RemoteComputerStatus.DISCONNECTED) "已保留历史 · 连接工作台后查看状态" else "离线历史 · 电脑上线后可继续执行", Modifier.padding(horizontal = 8.dp, vertical = 10.dp), size = 12, color = c.mutedForeground)
-                if (computer.sessions.isEmpty()) DeskText("这台电脑还没有会话", Modifier.padding(horizontal = 12.dp, vertical = 14.dp), size = 14, color = c.mutedForeground)
-                computer.sessions.forEach { session ->
-                    key(session.id) {
-                        Row(Modifier.fillMaxWidth().heightIn(min = 68.dp).deskPressable(c.accent, 12.dp, selected = selectedId == session.id) { onOpen(session) }
-                            .semantics { role = Role.Button; contentDescription = "打开会话：${session.title}"; selected = selectedId == session.id }
-                            .padding(horizontal = 12.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Box(Modifier.size(3.dp, 28.dp).background(if (selectedId == session.id) c.primary else c.border, RoundedCornerShape(2.dp)))
-                            if (session.id in pins) DeskIcon("pin", size = 17.dp, tint = c.primary)
-                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                DeskText(session.title, size = 16, maxLines = 2)
-                                val project = session.projectPath.trimEnd('/', '\\').substringAfterLast('/').substringAfterLast('\\')
-                                if (project.isNotBlank()) DeskText(project, size = 13, color = c.mutedForeground, maxLines = 1)
+                if (computer.sessions.isEmpty() && computer.projects.isEmpty()) DeskText("这台电脑还没有会话", Modifier.padding(horizontal = 12.dp, vertical = 14.dp), size = 14, color = c.mutedForeground)
+                computer.projects.forEach { project ->
+                    key(project.root) {
+                        Row(Modifier.fillMaxWidth().padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
+                                DeskText(project.label, size = 15, weight = FontWeight.SemiBold, maxLines = 1)
+                                DeskText(project.path, size = 12, color = c.mutedForeground, maxLines = 1)
                             }
-                            DeskIcon("chevron-right", size = 15.dp, tint = c.mutedForeground)
+                            if (computer.status == RemoteComputerStatus.ONLINE) DeskIconButton("plus", "在${project.label}新建会话", !busy) { onCreate(project) }
+                            if (workbenchOnline) DeskIconButton("ellipsis", "${project.label}项目选项", !busy) { onProject(project) }
+                        }
+                        computer.sessions.filter(project::contains).forEach { session ->
+                            key(session.id) { RemoteSessionRow(session, selectedId, pins, onOpen) }
                         }
                     }
                 }
+                computer.sessions.filter { session -> computer.projects.none { it.contains(session) } }.forEach { session ->
+                    key(session.id) { RemoteSessionRow(session, selectedId, pins, onOpen) }
+                }
             }
         }
+    }
+}
+
+@Composable private fun RemoteSessionRow(session: Session, selectedId: String?, pins: List<String>, onOpen: (Session) -> Unit) {
+    val c = LocalDeskColors.current
+    Row(Modifier.fillMaxWidth().heightIn(min = 68.dp).deskPressable(c.accent, 12.dp, selected = selectedId == session.id) { onOpen(session) }
+        .semantics { role = Role.Button; contentDescription = "打开会话：${session.title}"; selected = selectedId == session.id }
+        .padding(horizontal = 12.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Box(Modifier.size(3.dp, 28.dp).background(if (selectedId == session.id) c.primary else c.border, RoundedCornerShape(2.dp)))
+        if (session.id in pins) DeskIcon("pin", size = 17.dp, tint = c.primary)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            DeskText(session.title, size = 16, maxLines = 2)
+            val folder = session.projectPath.trimEnd('/', '\\').substringAfterLast('/').substringAfterLast('\\')
+            if (folder.isNotBlank()) DeskText(folder, size = 13, color = c.mutedForeground, maxLines = 1)
+        }
+        DeskIcon("chevron-right", size = 15.dp, tint = c.mutedForeground)
     }
 }

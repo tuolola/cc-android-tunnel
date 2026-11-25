@@ -111,7 +111,7 @@ README 的部署教程现对应 `v1.0.6-native` 与上游 v0.3.15，已核对该
 | 前台恢复检查 | 通过；不据此宣称完整断网恢复矩阵通过 |
 | 真实 Wi-Fi 历史分页 | **通过，约 47.6 秒**；2 个候选；30 块 / 30 ACK；947,499 个 UTF-16 code units；48 → 157 条事件；单次连接失败回调与被拒响应均为 0；前台恢复与清理通过 |
 
-真实服务检查使用显式 `runLive=true` 的 [ConfiguredProtocol26ReadOnlyTest](../app/src/androidTest/java/dev/ccdesk/nativeapp/core/ConfiguredProtocol26ReadOnlyTest.kt)，通过出站白名单禁止消息发送、会话创建/删除及权限修改。验证没有改变原有历史记录；Android APK 本身不执行服务器升级。
+真实服务检查使用显式 `runLive=true` 的 [ConfiguredProtocol26ReadOnlyTest](https://github.com/tuolola/cc-android-tunnel/blob/v1.0.6-native/app/src/androidTest/java/dev/ccdesk/nativeapp/core/ConfiguredProtocol26ReadOnlyTest.kt)，通过出站白名单禁止消息发送、会话创建/删除及权限修改。验证没有改变原有历史记录；Android APK 本身不执行服务器升级。
 
 APK 大小 **13,628,957 字节**，SHA-256 为 `539891255c66b5297bed16e849d9e9446d05c5107515e9b3affe0abd430eb30e`。本版沿用已有 Debug 签名；公开附件名称保持 `CCtunnel.apk`，旧版本附件不替换。
 
@@ -137,7 +137,7 @@ APK 大小 **13,628,957 字节**，SHA-256 为 `539891255c66b5297bed16e849d9e944
 
 交互用例日志保存在本地忽略目录 `.tmp/protocol-26-review`。已核对手机安装版本为 `1.0.5-native` / versionCode 11，安装后的 `base.apk` SHA-256 与下方交付包完全一致。深色截图为测试内局部主题，系统保持浅色；正式系统主题切换及状态栏效果未单独验收。发布后匿名下载与校验文件核对通过；真机公开更新源测试读取到 v1.0.5-native 及 APK 校验元数据。旧版 App 经浏览器下载和系统安装的完整升级链路未重跑。
 
-真实服务检查使用显式 `runLive=true` 的 [ConfiguredProtocol26ReadOnlyTest](../app/src/androidTest/java/dev/ccdesk/nativeapp/core/ConfiguredProtocol26ReadOnlyTest.kt)：凭据仅写内存隔离上下文、沿用原设备 ID，并通过出站白名单禁止消息发送、会话创建/删除和权限设置。报告仅包含固定状态、版本/协议与计数；本轮没有升级现有 VPS。
+真实服务检查使用显式 `runLive=true` 的 [ConfiguredProtocol26ReadOnlyTest](https://github.com/tuolola/cc-android-tunnel/blob/v1.0.6-native/app/src/androidTest/java/dev/ccdesk/nativeapp/core/ConfiguredProtocol26ReadOnlyTest.kt)：凭据仅写内存隔离上下文、沿用原设备 ID，并通过出站白名单禁止消息发送、会话创建/删除和权限设置。报告仅包含固定状态、版本/协议与计数；本轮没有升级现有 VPS。
 
 本轮最终 APK 大小为 **14,522,782 字节**，SHA-256 为 `13646f48395fe0b7303ce087bdcbcce47a3b80567c5da21f40745e8cc96e2bf2`。签名证书 SHA-256 为 `eaac7685189a81114415665d17e1ce4e3e4fa1154ae1c03470ff430a192f025b`，与旧版相同。这些值对应本轮最终 APK，不修改旧公开 v1.0.4 附件。
 

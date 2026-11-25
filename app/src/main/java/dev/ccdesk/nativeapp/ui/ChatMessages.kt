@@ -94,7 +94,7 @@ import java.nio.ByteBuffer
 import kotlinx.coroutines.delay
 
 private val deliveryLabels=mapOf("queued" to "已排队","submitted" to "已提交","received" to "已送达","not_sent" to "未发送","unconfirmed" to "送达状态未知")
-@Composable fun ChatTranscriptRow(row:ChatRow,active:Boolean,disabled:Boolean,current:Boolean,modifier:Modifier=Modifier,onHeightChange:()->Unit={},showActions:Boolean=false,actionText:String=row.content,send:(String,JSONObject)->Unit){
+@Composable fun ChatTranscriptRow(row:ChatRow,active:Boolean,disabled:Boolean,current:Boolean,modifier:Modifier=Modifier,onHeightChange:()->Unit={},showActions:Boolean=false,actionText:String=row.content,planMode:String?=null,send:(String,JSONObject)->Unit){
     val c=LocalDeskColors.current
     Column((if(current)modifier.fillMaxWidth().border(1.dp,c.foreground,RoundedCornerShape(12.dp)).background(c.muted,RoundedCornerShape(12.dp)).padding(9.dp)else modifier.fillMaxWidth()).onSizeChanged{onHeightChange()}){
         when(row.kind){
@@ -118,7 +118,7 @@ private val deliveryLabels=mapOf("queued" to "已排队","submitted" to "已提�
                 if(showActions&&actionText.isNotBlank())ReplyActions(actionText)
                 else Spacer(Modifier.height(8.dp))
             }
-            "tool"->row.tool?.let{ToolCard(it,row.runId,active,disabled,current,send)}
+            "tool"->row.tool?.let{ToolCard(it,row.runId,active,disabled,current,planMode,send)}
             "thinking"->{var open by remember(row.id){mutableStateOf(false)};val shown=open||current;Column(Modifier.padding(bottom=12.dp)){
                 DisclosureHeader(shown,"思考过程",{open=!open}){DeskText("思考过程",size=14,color=c.mutedForeground,weight=FontWeight.Medium);DeskChevron(shown,size=14.dp)}
                 DeskExpandable(shown){SelectionContainer{DeskText(row.content,Modifier.padding(top=8.dp),size=14,color=c.mutedForeground,lineHeight=24)}}
@@ -282,23 +282,75 @@ internal class ReplyMenuPositionProvider(
     val highlight=animatedHighlight(pressed,false,c.muted)
     Row(modifier.clip(RoundedCornerShape(8.dp)).background(highlight).clickable(interactionSource=interaction,indication=null,onClick=toggle).semantics{contentDescription=label;role=Role.Button;stateDescription=if(expanded)"已展开"else "已折叠"}.padding(vertical=4.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp),content=content)
 }
-@Composable private fun ToolCard(tool:ToolData,runId:String,active:Boolean,disabled:Boolean,reveal:Boolean,send:(String,JSONObject)->Unit){
+@Composable private fun ToolCard(tool:ToolData,runId:String,active:Boolean,disabled:Boolean,reveal:Boolean,planMode:String?,send:(String,JSONObject)->Unit){
     val c=LocalDeskColors.current;var expanded by remember(tool.id){mutableStateOf(false)}
     val awaiting=active&&tool.approvalId.isNotEmpty()&&tool.allowed==null&&tool.status.isEmpty()
-    val label=if(tool.status.isNotEmpty())mapOf("completed" to "已完成","failed" to "失败","cancelled" to "已停止","unknown" to "状态未知","denied" to "已拒绝")[tool.status]?:tool.status else if(awaiting)if(tool.name=="AskUserQuestion")"等待回答"else "等待审批"else if(tool.allowed==false)"已拒绝"else if(active)"进行中"else "已结束"
+    val isPlan = tool.name == "ExitPlanMode"
+    val plan = remember(isPlan, tool.input) {
+        if (isPlan) runCatching { (JSONObject(tool.input).opt("plan") as? String)?.takeIf(String::isNotBlank) }.getOrNull() else null
+    }
+    val label=if(tool.status.isNotEmpty())mapOf("completed" to "已完成","failed" to "失败","cancelled" to "已停止","unknown" to "状态未知","denied" to "已拒绝")[tool.status]?:tool.status else if(awaiting)when { isPlan -> "等待确认计划"; tool.name=="AskUserQuestion" -> "等待回答"; else -> "等待审批" } else if(tool.allowed==false)"已拒绝"else if(active)"进行中"else "已结束"
     val open=awaiting||expanded||reveal
     val taskControls=tool.taskId.isNotEmpty()&&active&&tool.status.isEmpty()
     Column(Modifier.fillMaxWidth().padding(vertical=8.dp).border(1.dp,if(awaiting)c.primary.copy(alpha=.5f)else c.border,RoundedCornerShape(16.dp)).background(c.card,RoundedCornerShape(16.dp)).padding(16.dp)){
-        DisclosureHeader(open,tool.name+"详情",{expanded=!expanded},Modifier.fillMaxWidth()){
-            DeskText(tool.name,Modifier.weight(1f),15,weight=FontWeight.Medium,lineHeight=22)
+        val title = if (isPlan) "Claude 的计划" else tool.name
+        DisclosureHeader(open,title+"详情",{expanded=!expanded},Modifier.fillMaxWidth()){
+            DeskText(title,Modifier.weight(1f),15,weight=FontWeight.Medium,lineHeight=22)
             AnimatedContent(label,transitionSpec={fadeIn(DeskMotion.fadeIn())togetherWith fadeOut(DeskMotion.fadeOut())},label="tool status"){DeskText(it,size=12,color=c.mutedForeground)}
             if(tool.elapsed>0)DeskText("· ${tool.elapsed.toString().removeSuffix(".0")}s",size=12,color=c.mutedForeground)
             DeskChevron(open,size=16.dp)
         }
         Column{
-            DeskExpandable(open){Column(Modifier.padding(top=12.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){if(tool.target.isNotEmpty())DeskText(tool.target,size=12,color=c.mutedForeground);if(tool.input.isNotEmpty()&&(!awaiting||tool.name!="AskUserQuestion"||questionsFrom(tool.input).isEmpty()))MonoOutput(tool.input);if(tool.output.isNotEmpty())ToolOutput(tool.output);if(tool.result.isNotEmpty()&&tool.result!=tool.output)ToolOutput(tool.result);if(tool.exitCode!=null)DeskText("退出码 ${tool.exitCode}",size=12,color=c.mutedForeground)}}
-            DeskExpandable(awaiting){key(tool.approvalId){Box(Modifier.padding(top=12.dp)){Approval(tool,runId,disabled||!awaiting,send)}}}
+            DeskExpandable(open){Column(Modifier.padding(top=12.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
+                if(tool.target.isNotEmpty())DeskText(tool.target,size=12,color=c.mutedForeground)
+                if (tool.safetyCheck) DeskText("Claude Code 安全拦截", size = 13, weight = FontWeight.SemiBold)
+                if (tool.approvalReason.isNotBlank()) DeskText(tool.approvalReason, size = 13, lineHeight = 20, color = c.mutedForeground)
+                if (plan != null) NativeMarkdown(plan)
+                else if(tool.input.isNotEmpty()&&(!awaiting||tool.name!="AskUserQuestion"||questionsFrom(tool.input).isEmpty()))MonoOutput(tool.input)
+                if (isPlan && tool.allowed == true) {
+                    val mode = planModes[tool.planMode]
+                    DeskText(listOfNotNull("已批准", mode, "已修改".takeIf { tool.planEdited }).joinToString(" · "), size = 13, color = c.mutedForeground)
+                }
+                if(tool.output.isNotEmpty())ToolOutput(tool.output);if(tool.result.isNotEmpty()&&tool.result!=tool.output)ToolOutput(tool.result);if(tool.exitCode!=null)DeskText("退出码 ${tool.exitCode}",size=12,color=c.mutedForeground)
+            }}
+            DeskExpandable(awaiting){key(tool.approvalId){Box(Modifier.padding(top=12.dp)){
+                if (isPlan) PlanApproval(tool, runId, disabled || !awaiting, plan, planMode, send)
+                else Approval(tool,runId,disabled||!awaiting,send)
+            }}}
             DeskExpandable(taskControls){FlowRow(Modifier.padding(top=12.dp),horizontalArrangement=Arrangement.spacedBy(8.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){DeskAction("转入后台",!disabled&&taskControls){send("run.task.background",json("runId" to runId,"toolId" to tool.id))};DeskAction("停止任务",!disabled&&taskControls){send("run.task.stop",json("runId" to runId,"taskId" to tool.taskId))}}}
+        }
+    }
+}
+private val planModes = linkedMapOf("auto" to "自动审批", "acceptEdits" to "接受编辑", "default" to "手动审批")
+private const val PLAN_LIMIT = 60_000
+
+@Composable private fun PlanApproval(tool: ToolData, runId: String, disabled: Boolean, plan: String?, defaultMode: String?, send: (String, JSONObject) -> Unit) {
+    val c = LocalDeskColors.current
+    var selectedMode by remember(defaultMode) { mutableStateOf(defaultMode?.takeIf(planModes::containsKey) ?: "auto") }
+    var edit by remember { mutableStateOf(false) }
+    var revised by remember(plan) { mutableStateOf(plan.orEmpty()) }
+    var feedback by remember { mutableStateOf("") }
+    fun reply(allowed: Boolean, decision: JSONObject) {
+        send("approval.reply", json("runId" to runId, "approvalId" to tool.approvalId, "allowed" to allowed, "plan" to decision))
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        DeskText("选择执行方式", weight = FontWeight.SemiBold)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            planModes.forEach { (mode, label) ->
+                DeskAction(label, !disabled, selected = selectedMode == mode) { selectedMode = mode }
+            }
+        }
+        if (edit) DeskField(revised, { revised = it }, "修改计划", Modifier.fillMaxWidth().heightIn(max = 240.dp)
+            .border(1.dp, c.border, RoundedCornerShape(12.dp)).padding(10.dp), enabled = !disabled, multiline = true, maxLength = PLAN_LIMIT)
+        DeskField(feedback, { feedback = it }, "退回意见（选填）", Modifier.fillMaxWidth().heightIn(max = 120.dp)
+            .border(1.dp, c.border, RoundedCornerShape(12.dp)).padding(10.dp), enabled = !disabled, multiline = true, maxLength = PLAN_LIMIT)
+        val validEdit = !edit || (revised.isNotBlank() && revised.trim().length <= PLAN_LIMIT)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            DeskAction(if (edit) "按修改执行" else "批准并执行", !disabled && validEdit, primary = true) {
+                reply(true, json("mode" to selectedMode).apply { if (edit) put("edited", revised.trim()) })
+            }
+            if (plan != null) DeskAction(if (edit) "恢复原计划" else "修改计划", !disabled) { edit = !edit; if (!edit) revised = plan }
+            DeskAction("退回计划", !disabled) { reply(false, json("feedback" to feedback.trim())) }
         }
     }
 }

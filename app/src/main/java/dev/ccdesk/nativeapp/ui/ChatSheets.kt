@@ -294,7 +294,7 @@ private val modelPages=mapOf("models" to 0,"more" to 1,"custom" to 2)
 }
 
 /** Session status, conversation search, context usage and background-task controls. */
-@Composable fun SessionSettingsSheet(visible:Boolean,session:Session,info:TranscriptProjection,readOnly:Boolean,reason:String,busy:Boolean,error:String,close:()->Unit,find:()->Unit,send:(String,JSONObject)->Unit){
+@Composable fun SessionSettingsSheet(visible:Boolean,session:Session,info:TranscriptProjection,readOnly:Boolean,reason:String,busy:Boolean,error:String,close:()->Unit,find:()->Unit,stats:JSONObject?=null,send:(String,JSONObject)->Unit){
     val c=LocalDeskColors.current
     var pending by remember{mutableStateOf("")}
     LaunchedEffect(visible){if(visible)pending=""}
@@ -319,7 +319,18 @@ private val modelPages=mapOf("models" to 0,"more" to 1,"custom" to 2)
             DeskExpandable(notice.isNotEmpty()){SNativeText(shownNotice,Modifier.padding(horizontal=4.dp),size=13,lineHeight=19,color=c.mutedForeground)}
             SettingsGroup("上下文与用量",card=false){
                 SNativeText(info.context?.let{"${"%,d".format(it.optLong("usedTokens"))} / ${"%,d".format(it.optLong("windowTokens"))} tokens · ${"%.1f".format(it.optDouble("percentage"))}%"}?:"尚无上下文统计",size=14,lineHeight=20,color=c.mutedForeground)
-                info.usage?.let{SNativeText("输入 ${"%,d".format(it.optLong("inputTokens"))} · 输出 ${"%,d".format(it.optLong("outputTokens"))} tokens"+if(it.isNull("costUsd"))""else " · 估算 $${"%.4f".format(it.optDouble("costUsd"))}",size=14,lineHeight=20,color=c.mutedForeground)}
+                stats?.let {
+                    val cost = if (it.isNull("costUsd")) "" else " · 估算 $${"%.4f".format(it.optDouble("costUsd"))}"
+                    SNativeText("会话用量 · ${it.optInt("requests")} 次请求$cost", size = 14, lineHeight = 20)
+                    SNativeText("输入 ${"%,d".format(it.optLong("inputTokens"))} · 输出 ${"%,d".format(it.optLong("outputTokens"))} tokens", size = 14, lineHeight = 20, color = c.mutedForeground)
+                }
+                info.usage?.let {
+                    val cost = if (it.isNull("costUsd")) "" else " · 估算 $${"%.4f".format(it.optDouble("costUsd"))}"
+                    SNativeText("最近一轮 · 输入 ${"%,d".format(it.optLong("inputTokens"))} · 输出 ${"%,d".format(it.optLong("outputTokens"))} tokens$cost", size = 14, lineHeight = 20, color = c.mutedForeground)
+                    val cache = listOf("cacheWrite1hTokens" to "1 小时", "cacheWrite5mTokens" to "5 分钟")
+                        .filterNot { (key, _) -> it.isNull(key) }.joinToString(" · ") { (key, label) -> "$label ${"%,d".format(it.optLong(key))}" }
+                    if (cache.isNotEmpty()) SNativeText("缓存写入 · $cache", size = 14, lineHeight = 20, color = c.mutedForeground)
+                }
                 DeskAction("压缩上下文",!blocked&&!draft&&!running,modifier=Modifier.fillMaxWidth(),loading=busy&&pending=="session.compact"){fire("session.compact",JSONObject())}
             }
             DeskExpandable(info.tasks.isNotEmpty()){

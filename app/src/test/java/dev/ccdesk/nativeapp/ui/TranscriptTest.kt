@@ -26,6 +26,27 @@ class TranscriptTest {
         val p=TranscriptProjection();p.update(listOf(event(1,"tool.requested","toolId" to "t","name" to "Bash","input" to "{}"),event(2,"approval.requested","toolId" to "t","approvalId" to "a"),event(3,"approval.resolved","approvalId" to "a","allowed" to false),event(4,"tool.result","toolId" to "t","status" to "denied","output" to "no","exitCode" to 1)),emptyList(),"r")
         assertEquals(1,p.rows.size);val tool=p.rows.single().tool!!;assertEquals(false,tool.allowed);assertEquals("a",tool.approvalId);assertEquals(1,tool.exitCode);assertEquals("denied",tool.status)
     }
+    @Test fun planAndSafetyApprovalsPreserveTheProtocolDetails() {
+        val projection = TranscriptProjection()
+        val events = listOf(
+            event(1, "tool.requested", "toolId" to "plan", "name" to "ExitPlanMode"),
+            event(2, "approval.requested", "toolId" to "plan", "approvalId" to "a"),
+            event(3, "approval.resolved", "approvalId" to "a", "allowed" to true, "mode" to "acceptEdits", "edited" to true),
+            event(4, "native.mode", "permissionMode" to "acceptEdits"),
+            event(5, "tool.requested", "toolId" to "tool", "name" to "Bash"),
+            event(6, "approval.requested", "toolId" to "tool", "approvalId" to "b", "reason" to "需要确认执行目标", "safetyCheck" to true),
+        )
+        projection.update(events, emptyList(), "r")
+        val plan = projection.rows.first().tool!!
+        assertEquals(true, plan.allowed)
+        assertEquals("acceptEdits", plan.planMode)
+        assertTrue(plan.planEdited)
+        assertEquals("审批模式已切换为自动接受编辑", projection.rows[1].content)
+        val tool = projection.rows.last().tool!!
+        assertEquals("需要确认执行目标", tool.approvalReason)
+        assertTrue(tool.safetyCheck)
+        assertNull(tool.allowed)
+    }
     @Test fun prependHistoryMaintainsChronologicalTextBlocks(){
         val later=event(20,"text.delta","messageId" to "x","text" to " world");val earlier=event(10,"text.delta","messageId" to "x","text" to "Hello")
         val p=TranscriptProjection();p.update(listOf(later),emptyList(),null);p.update(listOf(earlier,later),emptyList(),null)

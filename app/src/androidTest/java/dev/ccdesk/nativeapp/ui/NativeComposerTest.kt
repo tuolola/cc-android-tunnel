@@ -230,7 +230,7 @@ class NativeComposerTest {
 
         override suspend fun socket(endpoint:String,observer:SocketObserver):SocketConnection {
             fun frame(value:JSONObject){main.post{observer.message(value.toString())}}
-            main.post{observer.opened();frame(json("type" to "ready","protocolVersion" to 26,"sessions" to JSONArray().put(session())));frame(json("type" to "devices","devices" to JSONArray().put(json("id" to "server","server" to true,"ready" to true))))}
+            main.post{observer.opened();frame(json("type" to "ready","protocolVersion" to 29,"sessions" to JSONArray().put(session())));frame(json("type" to "devices","devices" to JSONArray().put(json("id" to "server","server" to true,"ready" to true))))}
             return object:SocketConnection{
                 override fun send(text:String):Boolean {val request=JSONObject(text);sent+=request;val id=request.optString("requestId");if(id.isNotEmpty()){if(request.optString("type")=="session.subscribe")frame(json("type" to "session.snapshot","requestId" to id,"session" to session(),"mode" to "replace","events" to JSONArray(),"hasEarlier" to false));frame(json("type" to "response","requestId" to id,"ok" to true))};return true}
                 override fun close(){}

@@ -11,9 +11,13 @@ data class RemoteComputer(
     val sessions: List<Session>,
     val status: RemoteComputerStatus,
     val duplicateName: Boolean = false,
+    val projects: List<Project> = emptyList(),
 ) {
     val name: String get() = device.name.ifBlank { "未命名电脑" }
 }
+
+fun Project.contains(session: Session): Boolean =
+    session.device?.id == device.id && projectPathKey(session.projectPath) == projectPathKey(path)
 
 internal fun WorkbenchState.serverDeviceIds(): Set<String> = buildSet {
     serverDeviceId?.let(::add)
@@ -43,23 +47,32 @@ fun remoteComputers(state: WorkbenchState, query: String = ""): List<RemoteCompu
     val sessions = state.sessions.filter { it.belongsToClient(excludedDeviceIds) }
         .sortedWith(compareByDescending<Session> { it.id in state.pins }.thenByDescending { it.updatedAt }.thenBy { it.id })
         .groupBy { requireNotNull(it.device).id }
-    val names = (sessions.mapValues { (_, rows) -> requireNotNull(rows.first().device) } + present)
+    val projects = state.projects.filter { it.device.id.isNotBlank() && !it.device.server && it.device.id !in excludedDeviceIds }
+        .groupBy { it.device.id }
+    val names = sessions.mapValues { (_, rows) -> requireNotNull(rows.first().device) } +
+        projects.mapValues { (_, rows) -> rows.first().device } + present
     val duplicateNames = names.values.groupingBy { it.name.ifBlank { "未命名电脑" } }.eachCount().filterValues { it > 1 }.keys
     val search = query.trim()
     return names.values.mapNotNull { device ->
         val allSessions = sessions[device.id].orEmpty()
+        val allProjects = projects[device.id].orEmpty()
         val computerMatches = search.isEmpty() || device.name.contains(search, ignoreCase = true) || device.id.contains(search, ignoreCase = true)
-        val matchingSessions = if (computerMatches) allSessions else allSessions.filter {
-            it.title.contains(search, ignoreCase = true) || it.projectPath.contains(search, ignoreCase = true)
+        val matchingProjects = if (computerMatches) allProjects else allProjects.filter {
+            it.label.contains(search, ignoreCase = true) || it.path.contains(search, ignoreCase = true)
         }
-        if (!computerMatches && matchingSessions.isEmpty()) return@mapNotNull null
+        val matchingSessions = if (computerMatches) allSessions else allSessions.filter {
+            it.title.contains(search, ignoreCase = true) || it.projectPath.contains(search, ignoreCase = true) ||
+                matchingProjects.any { project -> project.contains(it) }
+        }
+        if (!computerMatches && matchingSessions.isEmpty() && matchingProjects.isEmpty()) return@mapNotNull null
         val status = when {
             state.status != "online" -> RemoteComputerStatus.DISCONNECTED
             present[device.id]?.ready == true -> RemoteComputerStatus.ONLINE
             device.id in present -> RemoteComputerStatus.PREPARING
             else -> RemoteComputerStatus.OFFLINE
         }
-        RemoteComputer(device, matchingSessions, status, device.name.ifBlank { "未命名电脑" } in duplicateNames)
+        val visibleProjects = allProjects.filter { it in matchingProjects || matchingSessions.any(it::contains) }
+        RemoteComputer(device, matchingSessions, status, device.name.ifBlank { "未命名电脑" } in duplicateNames, visibleProjects)
     }.sortedWith(compareBy<RemoteComputer> { it.status.ordinal }
         .thenByDescending { it.sessions.maxOfOrNull(Session::updatedAt).orEmpty() }
         .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name }

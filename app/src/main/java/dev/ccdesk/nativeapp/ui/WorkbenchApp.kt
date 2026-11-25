@@ -37,6 +37,7 @@ import androidx.compose.ui.text.font.*
 import androidx.compose.ui.unit.*
 import dev.ccdesk.nativeapp.R
 import dev.ccdesk.nativeapp.core.*
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -167,6 +168,7 @@ import java.util.UUID
             LazyColumn(Modifier.fillMaxSize().testTag("sidebar-conversations"),contentPadding=PaddingValues(top=0.dp,bottom=24.dp)) {
                 item{DrawerItem("远程控制","monitor",route=="remote"){navigate("remote")}}
                 item{DrawerItem("通知","bell",badge=state.notices.count{!it.read}){navigate("notifications")}}
+                item{DrawerItem("帮助中心","circle-help",route=="help"){navigate("help")}}
                 if(pinned.isNotEmpty()){
                     item{DeskText("置顶",Modifier.padding(start=32.dp,top=32.dp,bottom=14.dp),size=16,weight=FontWeight.Medium)}
                     items(pinned,key={"pin:"+it.id}){session->DrawerItem(session.title,"pin",state.selectedId==session.id){repo.openSession(session.id);navigate("")}}
@@ -232,10 +234,23 @@ import java.util.UUID
     val history=state.histories[session.id];val active=session.activeRun
     val guest=!state.authenticated;val online=state.status=="online";val atServer=session.id.isEmpty()||(session.device!=null&&session.device.id==state.serverDeviceId);val device=state.devices.find{it.id==session.device?.id}
     val readOnly=!online||(!atServer&&device?.ready!=true)||active?.surface=="terminal"
+    val moveTargets = remember(state.devices, state.projects, state.localDeviceId, state.serverDeviceId, session.device, session.projectPath) {
+        val onlineDevices = state.devices.filter { it.ready == true && !it.server }.mapTo(mutableSetOf()) { it.id }
+        state.projects.filter { it.device.id in onlineDevices && !it.device.server && it.device.id != state.localDeviceId &&
+            it.device.id != state.serverDeviceId && !it.contains(session) }
+    }
     val reason=when{!online->if(state.status=="connecting")"正在重新连接工作台" else "工作台连接已断开";active?.surface=="terminal"->"会话已在终端打开";!atServer&&device==null->"设备离线";!atServer&&device?.ready!=true->"设备执行通道未就绪";else->""}
     val drafts=remember(state.endpoint,state.authenticated){mutableStateMapOf<String,String>()};val draftKey=session.id
     val input=drafts[draftKey].orEmpty()
     var busy by remember{mutableStateOf(false)};var error by remember{mutableStateOf("")};var sheet by remember{mutableStateOf("")};var search by remember(session.id){mutableStateOf(false)};var query by remember(session.id){mutableStateOf("")};var match by remember{mutableIntStateOf(0)}
+    val canMove = online && session.id.isNotEmpty() && active == null && !busy
+    var sessionStats by remember(state.endpoint, session.id) { mutableStateOf<JSONObject?>(null) }
+    LaunchedEffect(sheet, online, session.id, active?.id) {
+        if (sheet != "settings" || !online || session.id.isEmpty()) return@LaunchedEffect
+        try { sessionStats = repo.command("session.stats", json("sessionId" to session.id)).takeIf { it.optString("type") == "session.stats" } }
+        catch (e: CancellationException) { throw e }
+        catch (_: Exception) { sessionStats = null }
+    }
     var draftModel by remember(state.endpoint,state.authenticated,focusRequest){mutableStateOf<String?>(null)};var draftEffort by remember(state.endpoint,state.authenticated,focusRequest){mutableStateOf<String?>(null)};var draftChosen by remember(state.endpoint,state.authenticated,focusRequest){mutableStateOf(false)}
     val creationLock=remember(state.endpoint,state.authenticated,focusRequest){Mutex()}
     var draftCreationId by remember(state.endpoint,state.authenticated,focusRequest){mutableStateOf<String?>(null)}
@@ -290,7 +305,7 @@ import java.util.UUID
     suspend fun send(type:String,fields:JSONObject=JSONObject()):Boolean {if(readOnly||busy)return false;busy=true;error="";return try {val id=ensureSession();if(type=="message.send"&&draftChosen&&(session.id.isEmpty()||id==firstTarget)){repo.configureModel(id,draftModel,draftEffort);draftChosen=false};fields.put("sessionId",id);repo.command(type,fields);true}catch(e:Exception){error=e.message.orEmpty();false}finally{busy=false}}
     val command:(String,JSONObject)->Unit={type,fields->scope.launch{send(type,fields)}}
     val openSheet:(String)->Unit={keyboard?.hide();sheet=it}
-    val label=when(active?.waiting){"question"->"等待回答";"background"->"后台任务运行中";else->active?.status?.let{runLabels[it]?:it}.orEmpty()}
+    val label=when(active?.waiting){"question"->"等待回答";"plan"->"等待确认计划";"background"->"后台任务运行中";else->active?.status?.let{runLabels[it]?:it}.orEmpty()}
     val canContinue=active==null&&projection.status in listOf("failed","cancelled")&&!readOnly
     // Model selection state, shown inside the composer.
     val model=if(draftChosen&&(session.id.isEmpty()||session.id==firstTarget))draftModel else session.model;val effort=if(draftChosen&&(session.id.isEmpty()||session.id==firstTarget))draftEffort else session.effort
@@ -334,7 +349,7 @@ import java.util.UUID
             LazyColumn(Modifier.fillMaxSize(),state=list,contentPadding=PaddingValues(horizontal=16.dp,vertical=12.dp)){
                 if(history?.hasEarlier==true&&online)item(key="earlier"){DeskAction(if(history.loading)"正在加载…"else "加载更早的记录",!history.loading,loading=history.loading){scope.launch{try{repo.loadEarlier(session.id)}catch(e:Exception){error=e.message.orEmpty()}}}}
                 // Stable row ids: a streamed chunk updates one row in place; only newly inserted rows fade in.
-                itemsIndexed(rows,key={_,r->r.id},contentType={_,r->r.kind}){i,row->ChatTranscriptRow(row,active?.id==row.runId,readOnly||busy,focus==i,modifier=Modifier.animateItem(fadeInSpec=DeskMotion.fadeIn(),placementSpec=null,fadeOutSpec=DeskMotion.fadeOut()),onHeightChange={rowLayoutVersion++},showActions=row.kind=="reply"&&active?.id!=row.runId&&rows.drop(i+1).none{it.runId==row.runId&&it.kind=="reply"},actionText=rows.filter{it.runId==row.runId&&it.kind=="reply"}.joinToString("\n\n"){it.content},send=command)}
+                itemsIndexed(rows,key={_,r->r.id},contentType={_,r->r.kind}){i,row->ChatTranscriptRow(row,active?.id==row.runId,readOnly||busy,focus==i,modifier=Modifier.animateItem(fadeInSpec=DeskMotion.fadeIn(),placementSpec=null,fadeOutSpec=DeskMotion.fadeOut()),onHeightChange={rowLayoutVersion++},showActions=row.kind=="reply"&&active?.id!=row.runId&&rows.drop(i+1).none{it.runId==row.runId&&it.kind=="reply"},actionText=rows.filter{it.runId==row.runId&&it.kind=="reply"}.joinToString("\n\n"){it.content},planMode=session.modeBeforePlan,send=command)}
             }
             if(rows.isEmpty()&&session.id.isEmpty()&&history?.loading!=true){
                 Column(Modifier.align(Alignment.Center).padding(horizontal=32.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
@@ -374,12 +389,37 @@ import java.util.UUID
         ChatMenuItem("刷新会话","refresh-cw",enabled=!guest&&!readOnly&&!busy&&!creatingSession&&session.id.isNotBlank()){
             menu="";scope.launch{send("session.status",json("quota" to true))}
         }
+        if (session.id.isNotEmpty() && moveTargets.isNotEmpty()) {
+            ChatMenuItem("移到项目…", "folder", enabled = canMove) { menu = ""; openSheet("move") }
+        }
+    }
+    DeskSheetOverlay(sheet == "move", { if (!busy) sheet = "" }, dismissible = !busy, scrimLabel = "关闭项目选择") { motion ->
+        SheetHeader("移到项目", motion, closeEnabled = !busy)
+        NativeScrollContent(Modifier.fillMaxWidth(), PaddingValues(horizontal = 16.dp, vertical = 8.dp), 8.dp) {
+            DeskText("会话后续将在目标电脑上执行。", size = 14, color = c.mutedForeground)
+            if (moveTargets.isEmpty()) DeskText("暂无在线电脑的可用项目。", size = 14, color = c.mutedForeground)
+            moveTargets.groupBy { it.device.id }.values.forEach { projects ->
+                DeskText(state.devices.find { it.id == projects.first().device.id }?.name.orEmpty().ifBlank { "未命名电脑" }, weight = FontWeight.SemiBold)
+                projects.forEach { project ->
+                    SheetRow("folder", project.label, detail = project.path, enabled = canMove) {
+                        busy = true; error = ""
+                        scope.launch {
+                            try { repo.moveSessionToProject(session.id, project); sheet = "" }
+                            catch (e: CancellationException) { throw e }
+                            catch (e: Exception) { error = e.message ?: "无法移动会话。" }
+                            finally { busy = false }
+                        }
+                    }
+                }
+            }
+            if (error.isNotBlank()) DeskText(error, size = 14)
+        }
     }
     ModelSheet(model,effort,catalog,state.defaultModel,projection.nativeModel,modelLocked,{sheet=""},onSave={m,e->if(session.id.isEmpty()){draftModel=m;draftEffort=e;draftChosen=true}else{repo.configureModel(session.id,m,e);draftChosen=false}},onLoad=if(online&&!guest&&!readOnly&&active==null&&!catalogBlocked&&querySession!=null)({repo.loadModelCatalog(querySession)})else null,createsSession=session.id.isEmpty()&&serverSessions.isEmpty(),visible=sheet=="model",lockedReason=modelLockReason,catalogLoading=catalogKey in state.modelCatalogLoading,catalogError=state.modelCatalogErrors[catalogKey])
     PermissionSheet(sheet=="permissions"&&clientSession,session,readOnly,reason,busy,error,{sheet=""}){type,fields->
         scope.launch{if(clientSession&&active==null&&send(type,fields)){haptics.confirm();sheet=""}}
     }
-    SessionSettingsSheet(sheet=="settings"&&!guest,session,projection,readOnly,reason,busy,error,{sheet=""},{sheet="";search=true}){type,fields->scope.launch{if(send(type,fields)&&type=="session.compact"){haptics.confirm();sheet=""}}}
+    SessionSettingsSheet(sheet=="settings"&&!guest,session,projection,readOnly,reason,busy,error,{sheet=""},{sheet="";search=true},stats=sessionStats){type,fields->scope.launch{if(send(type,fields)&&type=="session.compact"){haptics.confirm();sheet=""}}}
 }
 
 /** Permission picker shares the model picker's press feedback, chevron and accessible touch target. */

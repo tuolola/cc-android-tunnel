@@ -89,6 +89,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import dev.ccdesk.nativeapp.R
 import dev.ccdesk.nativeapp.core.WorkbenchRepository
 import dev.ccdesk.nativeapp.core.WorkbenchState
+import dev.ccdesk.nativeapp.core.serverDeviceIds
 import dev.ccdesk.nativeapp.core.normalizeServiceAddress
 import dev.ccdesk.nativeapp.core.normalizeFingerprint
 import kotlinx.coroutines.CancellationException
@@ -633,16 +634,26 @@ private fun normalizedPin(raw: String): String {
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
     var accountError by remember { mutableStateOf("") }
-    var summaryError by remember { mutableStateOf("") }
+    var quotaError by remember { mutableStateOf("") }
     var from by remember { mutableStateOf("") }
     var to by remember { mutableStateOf("") }
     var generation by remember { mutableIntStateOf(0) }
     fun filters(offset: Int) = fields("from" to from, "to" to to, "limit" to 25, "offset" to offset, "offsetMinutes" to (ZoneId.systemDefault().rules.getOffset(Instant.now()).totalSeconds / 60), "model" to model.takeIf { it.isNotEmpty() })
     LaunchedEffect(state.endpoint, state.status, revision) {
         if (state.status != "online") return@LaunchedEffect
-        accountError = ""; summaryError = ""
-        launch { try { repo.command("account.status") } catch (e: CancellationException) { throw e } catch (e: Exception) { accountError = e.message.orEmpty() } }
-        launch { try { repo.command("usage.summary") } catch (e: CancellationException) { throw e } catch (e: Exception) { summaryError = e.message.orEmpty() } }
+        accountError = ""; quotaError = ""
+        val account = try { repo.command("account.status") }
+        catch (e: CancellationException) { throw e }
+        catch (e: Exception) { accountError = e.message.orEmpty(); return@LaunchedEffect }
+        if (!account.optBoolean("loggedIn") || (revision == 0 && repo.state.value.quota?.optJSONObject("rateLimits") != null)) return@LaunchedEffect
+        val snapshot = repo.state.value
+        val serverDevices = snapshot.serverDeviceIds()
+        val session = snapshot.sessions.firstOrNull { it.activeRun == null && it.device?.id in serverDevices }
+            ?: snapshot.sessions.firstOrNull { row -> row.activeRun == null && snapshot.devices.any { it.ready == true && it.id == row.device?.id } }
+            ?: return@LaunchedEffect
+        try { repo.command("session.status", fields("sessionId" to session.id, "quota" to true)) }
+        catch (e: CancellationException) { throw e }
+        catch (e: Exception) { quotaError = e.message.orEmpty() }
     }
     DisposableEffect(repo, state.endpoint, state.status) {
         if (state.status == "online") repo.setQuotaWatching(true)
@@ -670,11 +681,13 @@ private fun normalizedPin(raw: String): String {
     }
     SSection("配额") {
         val names = mapOf("five_hour" to "5 小时配额", "seven_day" to "7 天配额", "seven_day_sonnet" to "Sonnet 周配额", "seven_day_opus" to "Opus 周配额")
-        val windows = state.usageSummary.objects("windows")
+        val rateLimits = state.quota?.optJSONObject("rateLimits")
+        val windows = rateLimits.objects("windows")
+        val readError = quotaError.ifBlank { state.quota.text("error") }
         windows.forEachIndexed { index, window ->
-            SRow(names[window.text("name")] ?: window.text("name"), "已用 " + (if (window.isNull("utilization")) "—" else number(window.optDouble("utilization")) + "%") + if (window.text("resetsAt").isNotEmpty()) " · ${dateTime(window.text("resetsAt"))} 重置" else "", "gauge", last = index == windows.lastIndex)
+            SRow(names[window.text("name")] ?: window.text("name"), "已用 " + (if (window.isNull("utilization")) "—" else number(window.optDouble("utilization")) + "%") + if (window.text("resetsAt").isNotEmpty()) " · ${dateTime(window.text("resetsAt"))} 重置" else "", "gauge", last = index == windows.lastIndex && readError.isBlank())
         }
-        if (windows.isEmpty()) SRow(summaryError.ifBlank { if (state.usageSummary != null) "暂无配额信息" else "正在读取配额…" }, last = true)
+        if (windows.isEmpty() || readError.isNotBlank()) SRow(readError.ifBlank { "暂无配额信息" }, last = true)
     }
     SSection("用量明细") {
         Column(Modifier.padding(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -758,36 +771,51 @@ private fun normalizedPin(raw: String): String {
     }
 }
 
-private val helpTopics = listOf(
-    "如何使用服务地址直连？" to "打开「连接工作台」，填写管理员提供的 WSS 服务地址（例如 wss://host:port/ws）和服务凭据，使用自签证书时再粘贴服务证书指纹。点「连接」即可进入工作台。地址和指纹都没有改变时，凭据可留空。更新或移除服务证书指纹时，请重新输入凭据。",
-    "连接失败或凭据失效怎么办？" to "核对 WSS 服务地址、端口和 /ws 路径，确认手机可以访问服务。服务凭据变更后，在连接设置中填写新凭据并重新连接。",
-    "自签证书的指纹在哪里填写？" to "在「连接工作台」填入服务地址，在「服务证书指纹（可选）」粘贴管理员通过可信渠道提供的 SHA-256 叶证书指纹。常规受信任证书可留空。若入口使用反向代理，填写代理对外提供的证书指纹。证书续期或更换后，从管理员处取得新指纹并重新连接。点击「忘记此地址」会清除该主机和端口的指纹。",
-    "如何打开或新建会话？" to "电脑会话从侧栏远程控制中按电脑选择；普通会话从侧栏的聊天记录中打开。点击顶部的新建会话按钮进入空白聊天，发送第一条消息后创建服务端会话。",
-    "怎样处理工具审批？" to "会话出现审批请求时，先阅读工具名和请求内容，再选择允许或拒绝。通知中心可以带你回到对应的会话。",
-    "如何引用项目文件？" to "在聊天中引用在线项目目录中的文件，让模型读取项目上下文。当前工作台协议支持项目文件引用，手机本地文件上传尚无对应接口。",
-    "如何管理浏览器访问？" to "进入「设置 → 访问管理」查看服务端的浏览器登录记录、撤销登录或配置浏览器二次验证。这些设置不用于手机登录；手机只使用 WSS 服务地址和服务凭据。域名、证书和访问开关由桌面端管理。",
-    "在哪里查看模型用量？" to "打开「设置 → 账号与用量」查看登录身份、配额窗口及工作台记录的请求。成本采用服务端报告的 API 价格估算。"
+private val helpTopics = mapOf(
+    "连接工作台" to listOf(
+        "如何使用服务地址直连？" to "在连接设置填写管理员提供的 WSS 地址和服务凭据。使用自签证书时，还要填写从管理员处取得的 SHA-256 证书指纹。",
+        "连接失败或凭据失效怎么办？" to "核对服务地址、端口和 /ws 路径。凭据变更后，在连接设置填写新凭据并重新连接。当前源码构建使用协议 29，对应上游 v0.3.18 和 v0.3.19。",
+        "自签证书的指纹在哪里填写？" to "在连接设置填写服务入口的叶证书指纹。反向代理场景填写代理对外提供的证书指纹。证书更换后，从管理员处取得新指纹。点击「忘记此地址」会清除该主机和端口的指纹。",
+    ),
+    "项目与会话" to listOf(
+        "如何打开或新建会话？" to "在侧栏的「远程控制」选择电脑和项目。在线电脑的项目旁可点加号新建会话。侧栏的「新建会话」会在发送第一条消息后创建服务端会话。",
+        "如何移动或管理项目？" to "打开会话右上角菜单，选择「移到项目」。运行结束后可选择已就绪电脑的项目。远程控制的项目菜单支持重命名和移除，移除后会话保留为普通会话。",
+    ),
+    "审批与计划" to listOf(
+        "怎样处理工具审批？" to "阅读工具输入、目标和审批理由，再选择允许或拒绝。通知中心可以带你回到对应的会话。",
+        "怎样阅读和修改计划？" to "展开「Claude 的计划」阅读正文，选择执行方式后批准。也可以修改计划再执行，或填入意见后退回。",
+    ),
+    "账号与访问" to listOf(
+        "如何管理浏览器访问？" to "在「设置 → 访问管理」查看浏览器登录、撤销登录或配置二次验证。域名、证书和访问开关由桌面端管理。",
+        "在哪里查看模型用量？" to "在「设置 → 账号与用量」查看订阅额度和请求记录。在「会话设置」查看单个会话的 Token 用量和估算费用。",
+    ),
 )
 
 @Composable private fun HelpContent(onNavigate: (String) -> Unit) {
     val c = LocalDeskColors.current
-    var open by remember { mutableStateOf<Int?>(0) }
-    SSection("常见问题") {
-        helpTopics.forEachIndexed { index, (question, answer) ->
-            val interaction = remember(index) { MutableInteractionSource() }
+    var query by remember { mutableStateOf("") }
+    var open by remember { mutableStateOf<String?>(null) }
+    SField("搜索帮助", query, { query = it }, placeholder = "例如：证书、项目、计划")
+    val matches = helpTopics.mapValues { (section, topics) ->
+        topics.filter { (question, answer) -> listOf(section, question, answer).any { it.contains(query.trim(), ignoreCase = true) } }
+    }.filterValues { it.isNotEmpty() }
+    if (matches.isEmpty()) SHint("没有找到相关帮助。")
+    matches.forEach { (section, topics) -> SSection(section) {
+        topics.forEachIndexed { index, (question, answer) -> key(question) {
+            val interaction = remember { MutableInteractionSource() }
             val pressed by interaction.pressedState()
             Column {
-                Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).background(animatedHighlight(pressed, false, c.muted)).clickable(interactionSource = interaction, indication = null) { open = if (open == index) null else index }.semantics { stateDescription = if (open == index) "展开" else "收起"; role = Role.Button }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).background(animatedHighlight(pressed, false, c.muted)).clickable(interactionSource = interaction, indication = null) { open = if (open == question) null else question }.semantics { stateDescription = if (open == question) "已展开" else "已收起"; role = Role.Button }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     SNativeText(question, Modifier.weight(1f), size = 15, lineHeight = 21)
-                    DeskChevron(open == index)
+                    DeskChevron(open == question)
                 }
-                DeskExpandable(open == index) {
+                DeskExpandable(open == question) {
                     SNativeText(answer, Modifier.padding(bottom = 16.dp), size = 14, lineHeight = 23, color = c.mutedForeground, selectable = true)
                 }
-                if (index != helpTopics.lastIndex) SDivider()
+                if (index != topics.lastIndex) SDivider()
             }
-        }
-    }
+        } }
+    } }
     SAction("打开连接设置", secondary = true) { onNavigate("connection") }
     SAction("开源许可与致谢", secondary = true) { onNavigate("licenses") }
 }

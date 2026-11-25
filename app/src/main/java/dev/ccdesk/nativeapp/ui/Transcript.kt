@@ -8,7 +8,8 @@ import androidx.compose.runtime.*
 import dev.ccdesk.nativeapp.core.DeskEvent
 import org.json.JSONObject
 
-data class ToolData(val id:String,val name:String="工具调用",val input:String="",val output:String="",val result:String="",val status:String="",val elapsed:Double=0.0,val taskId:String="",val approvalId:String="",val allowed:Boolean?=null,val target:String="",val exitCode:Int?=null)
+data class ToolData(val id:String,val name:String="工具调用",val input:String="",val output:String="",val result:String="",val status:String="",val elapsed:Double=0.0,val taskId:String="",val approvalId:String="",val allowed:Boolean?=null,val target:String="",val exitCode:Int?=null,
+    val approvalReason:String="", val safetyCheck:Boolean=false, val planMode:String="", val planEdited:Boolean=false)
 @Stable class ChatRow(val id:String,val runId:String,val kind:String,initial:String="") {
     var content by mutableStateOf(initial)
     var delivery by mutableStateOf("")
@@ -85,11 +86,12 @@ val runLabels=mapOf("running" to "运行中","awaiting_approval" to "等待审�
             "tool.progress"->{val row=tool(e,p.optString("toolId"));row.tool=row.tool!!.copy(elapsed=p.optDouble("elapsedSeconds",0.0))}
             "tool.task"->{val row=tool(e,p.optString("toolId"));row.tool=row.tool!!.copy(taskId=p.optString("taskId"))}
             "tool.result"->{val row=tool(e,p.optString("toolId"));row.tool=row.tool!!.copy(result=p.optString("output"),status=p.optString("status"),exitCode=if(p.isNull("exitCode"))null else p.optInt("exitCode"))}
-            "approval.requested"->{val row=tool(e,p.optString("toolId"));val id=p.optString("approvalId");row.tool=row.tool!!.copy(approvalId=id);approvals[id]=row}
-            "approval.resolved"->approvals[p.optString("approvalId")]?.let{it.tool=it.tool!!.copy(allowed=p.optBoolean("allowed"))}
+            "approval.requested"->{val row=tool(e,p.optString("toolId"));val id=p.optString("approvalId");row.tool=row.tool!!.copy(approvalId=id, approvalReason=p.optString("reason"), safetyCheck=p.optBoolean("safetyCheck"));approvals[id]=row}
+            "approval.resolved"->approvals[p.optString("approvalId")]?.let{it.tool=it.tool!!.copy(allowed=p.optBoolean("allowed"), planMode=p.optString("mode"), planEdited=p.optBoolean("edited"))}
             "run.status"->{status=p.optString("status");if(status in listOf("completed","cancelled","failed")){block=null;add(e,"status",listOfNotNull(runLabels[status],p.optString("reason").takeIf{it.isNotEmpty()}).joinToString(" · "))}}
             "run.error"->add(e,"error",p.optString("message"))
             "native.notice"->add(e,"notice",p.optString("text"))
+            "native.mode"->permissionNames[p.optString("permissionMode")]?.let { add(e, "notice", "审批模式已切换为$it") }
             "native.compact"->add(e,"notice","上下文已压缩"+if(p.isNull("previousTokens"))"" else " · 原有 ${p.optLong("previousTokens")} tokens")
             "native.session"->nativeModel=p.optString("model")
             "native.metrics"->{context=p.optJSONObject("context")?:context;usage=p.optJSONObject("usage")?:usage}

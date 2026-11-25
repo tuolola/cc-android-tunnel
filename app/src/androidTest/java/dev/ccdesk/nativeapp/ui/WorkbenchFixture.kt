@@ -48,8 +48,8 @@ internal class FixtureTransport(private val device: JSONObject = json("id" to "s
                 val request = JSONObject(text); sent += request
                 if (request.optString("type") == "auth") {
                     check(request.optString("token") == "fixture-service-token-0123456789")
-                    check(request.optInt("protocolVersion") == 26 && !request.optBoolean("tunnel", true))
-                    frame(json("type" to "ready", "protocolVersion" to 26, "sessions" to JSONArray(sessions)))
+                    check(request.optInt("protocolVersion") == 29 && !request.optBoolean("tunnel", true))
+                    frame(json("type" to "ready", "protocolVersion" to 29, "sessions" to JSONArray(sessions)))
                     frame(json("type" to "devices", "devices" to JSONArray().put(json("id" to "server", "name" to "Fixture server", "server" to true, "ready" to true))))
                 }
                 val id = request.optString("requestId")
